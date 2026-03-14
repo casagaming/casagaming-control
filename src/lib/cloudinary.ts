@@ -25,6 +25,7 @@ export async function uploadImage(file: File): Promise<string | null> {
     formData.append('timestamp', timestamp);
     formData.append('signature', signature);
     formData.append('folder', folder);
+
     
     const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
       method: 'POST',

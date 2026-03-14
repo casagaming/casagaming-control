@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Product, Category, ProductVariant } from '../types/supabase';
-import { Plus, Edit, Trash2, Search, Upload, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Upload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { uploadImage, deleteImage } from '../lib/cloudinary';
 import ConfirmModal from '../components/ConfirmModal';
@@ -408,9 +408,13 @@ export default function Products() {
                   
                   <div className="aspect-square flex justify-center items-center border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
                     <div className="text-center">
-                      <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                      {uploading ? (
+                        <Loader2 className="mx-auto h-8 w-8 text-indigo-600 animate-spin" />
+                      ) : (
+                        <Upload className="mx-auto h-8 w-8 text-gray-400" />
+                      )}
                       <span className="mt-2 block text-sm font-medium text-gray-600">
-                        {uploading ? 'Uploading...' : 'Add Image'}
+                        {uploading ? 'جاري الرفع...' : 'إضافة صورة'}
                       </span>
                     </div>
                     <input 
@@ -492,12 +496,20 @@ export default function Products() {
                                </button>
                              </div>
                            ) : (
-                             <label className="flex items-center justify-center w-full py-2 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-white transition-colors">
-                               <span className="text-xs font-bold text-indigo-600">Upload Image</span>
+                             <label className="flex items-center justify-center w-full py-2 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-white transition-colors relative">
+                               {uploading ? (
+                                 <div className="flex items-center gap-2">
+                                   <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                                   <span className="text-xs font-bold text-gray-500">جاري الرفع...</span>
+                                 </div>
+                               ) : (
+                                 <span className="text-xs font-bold text-indigo-600">رفع صورة المتغير</span>
+                               )}
                                <input 
                                  type="file" 
                                  className="hidden" 
                                  accept="image/*" 
+
                                  onChange={async (e) => {
                                    if (!e.target.files?.[0]) return;
                                    setUploading(true);

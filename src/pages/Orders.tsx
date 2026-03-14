@@ -29,6 +29,11 @@ export default function Orders() {
             product:products (
               name_en,
               image_url
+            ),
+            variant:product_variants (
+              id,
+              name_en,
+              image_url
             )
           )
         `)
@@ -53,11 +58,18 @@ export default function Orders() {
       if (status === 'cancelled' && currentOrder.status !== 'cancelled') {
         if (currentOrder.order_items) {
           for (const item of currentOrder.order_items) {
-            if (item.product_id) {
-              const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
-              if (product) {
-                await supabase.from('products').update({ stock: product.stock + item.quantity }).eq('id', item.product_id);
-              }
+            if (item.variant_id) {
+               // Restore variant stock
+               const { data: variant } = await supabase.from('product_variants').select('stock').eq('id', item.variant_id).single();
+               if (variant) {
+                 await supabase.from('product_variants').update({ stock: variant.stock + item.quantity }).eq('id', item.variant_id);
+               }
+            } else if (item.product_id) {
+               // Restore main product stock
+               const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+               if (product) {
+                 await supabase.from('products').update({ stock: product.stock + item.quantity }).eq('id', item.product_id);
+               }
             }
           }
         }
@@ -67,11 +79,18 @@ export default function Orders() {
       if (status !== 'cancelled' && currentOrder.status === 'cancelled') {
         if (currentOrder.order_items) {
           for (const item of currentOrder.order_items) {
-            if (item.product_id) {
-              const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
-              if (product) {
-                await supabase.from('products').update({ stock: Math.max(0, product.stock - item.quantity) }).eq('id', item.product_id);
-              }
+            if (item.variant_id) {
+               // Deduct variant stock
+               const { data: variant } = await supabase.from('product_variants').select('stock').eq('id', item.variant_id).single();
+               if (variant) {
+                 await supabase.from('product_variants').update({ stock: Math.max(0, variant.stock - item.quantity) }).eq('id', item.variant_id);
+               }
+            } else if (item.product_id) {
+               // Deduct main product stock
+               const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+               if (product) {
+                 await supabase.from('products').update({ stock: Math.max(0, product.stock - item.quantity) }).eq('id', item.product_id);
+               }
             }
           }
         }
@@ -314,11 +333,22 @@ export default function Orders() {
                   {selectedOrder.order_items?.map((item) => (
                     <div key={item.id} className="flex items-center justify-between group">
                       <div className="flex items-center gap-4">
-                        <div className="h-14 w-14 rounded-xl overflow-hidden border border-gray-100 bg-white">
-                          <img src={Array.isArray(item.product?.image_url) ? item.product.image_url[0] : ''} alt="" className="w-full h-full object-cover" />
+                        <div className="h-14 w-14 rounded-xl overflow-hidden border border-gray-100 bg-white flex-shrink-0">
+                          <img 
+                            src={
+                              item.variant?.image_url 
+                                ? item.variant.image_url 
+                                : (Array.isArray(item.product?.image_url) ? item.product.image_url[0] : '')
+                            } 
+                            alt={item.product?.name_en || 'Product'} 
+                            className="w-full h-full object-cover" 
+                          />
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-gray-900">{item.product?.name_en || 'Unknown'}</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            {item.product?.name_en || 'Unknown'}
+                            {item.variant && <span className="text-indigo-600 block text-xs">Variant: {item.variant.name_en}</span>}
+                          </p>
                           <p className="text-xs font-medium text-gray-500">{item.quantity} x {item.price} د.ج</p>
                         </div>
                       </div>

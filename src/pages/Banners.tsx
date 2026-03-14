@@ -244,8 +244,17 @@ export default function Banners() {
                     </>
                   ) : (
                     <label className="flex flex-col items-center gap-2 cursor-pointer text-gray-400 hover:text-indigo-500 transition-colors">
-                      {uploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Plus className="w-10 h-10" />}
-                      <span className="text-sm font-bold">رفع صورة</span>
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                          <span className="text-sm font-bold text-gray-500">جاري الرفع...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-10 h-10 text-gray-400" />
+                          <span className="text-sm font-bold">رفع صورة</span>
+                        </>
+                      )}
                       <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploading} />
                     </label>
                   )}

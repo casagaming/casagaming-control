@@ -69,9 +69,11 @@ export type OrderItem = {
   id: string;
   order_id: string;
   product_id: string | null;
+  variant_id: string | null;
   quantity: number;
   price: number;
   product?: Product; // for joined queries
+  variant?: ProductVariant; // for joined queries
 };
 
 export type StoreConfig = {
