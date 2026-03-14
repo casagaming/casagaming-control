@@ -97,16 +97,13 @@ export default function Categories() {
       toast.error('Name is required');
       return;
     }
-    if (!formData.slug.trim()) {
-      toast.error('Slug is required');
-      return;
-    }
 
     try {
+      const generatedSlug = formData.name_en.trim().toLowerCase().replace(/\s+/g, '-');
       const categoryData = {
         name_ar: formData.name_en, // Auto-fill Arabic field with English to satisfy DB constraints
         name_en: formData.name_en,
-        slug: formData.slug,
+        slug: formData.slug || generatedSlug,
         image_url: formData.image_url || null,
       };
 
@@ -206,14 +203,13 @@ export default function Categories() {
               <tr>
                 <th className="px-4 sm:px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">الصورة</th>
                 <th className="px-4 sm:px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">الاسم</th>
-                <th className="hidden sm:table-cell px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">الرابط (Slug)</th>
                 <th className="px-4 sm:px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">إجراءات</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center gap-2">
                        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                        <span>جاري التحميل...</span>
@@ -222,7 +218,7 @@ export default function Categories() {
                 </tr>
               ) : filteredCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">لا توجد أصناف حالياً</td>
+                  <td colSpan={3} className="px-6 py-12 text-center text-gray-500">لا توجد أصناف حالياً</td>
                 </tr>
               ) : (
                 filteredCategories.map((category) => (
@@ -236,9 +232,6 @@ export default function Categories() {
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-bold text-gray-900 truncate max-w-[120px] sm:max-w-none">{category.name_en}</div>
-                    </td>
-                    <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-medium font-mono">
-                      {category.slug}
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right text-sm">
                       <div className="flex justify-end gap-2">
@@ -280,15 +273,7 @@ export default function Categories() {
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Slug</label>
-                <input
-                  type="text"
-                  value={formData.slug}
-                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
+
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category Image</label>
