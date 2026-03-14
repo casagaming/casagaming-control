@@ -461,7 +461,7 @@ export default function Products() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-bold text-gray-700 mb-1">Variant Name (e.g. Red / أحمر)</label>
                           <input
@@ -472,6 +472,21 @@ export default function Products() {
                                const newVariants = [...formData.variants];
                                newVariants[index].name_en = e.target.value;
                                newVariants[index].name_ar = e.target.value; // Mirror to arabic
+                               setFormData(prev => ({ ...prev, variants: newVariants }));
+                            }}
+                            className="w-full border border-gray-300 rounded-md py-1.5 px-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Stock (المخزون)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={variant.stock === undefined ? '' : variant.stock}
+                            onChange={(e) => {
+                               const newVariants = [...formData.variants];
+                               newVariants[index].stock = parseInt(e.target.value) || 0;
                                setFormData(prev => ({ ...prev, variants: newVariants }));
                             }}
                             className="w-full border border-gray-300 rounded-md py-1.5 px-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
