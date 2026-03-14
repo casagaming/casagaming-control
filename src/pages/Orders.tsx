@@ -50,52 +50,6 @@ export default function Orders() {
 
   async function updateOrderStatus(id: string, status: string) {
     try {
-      const currentOrder = orders.find(o => o.id === id);
-      if (!currentOrder) return;
-
-      // Logic for stock sync
-      // 1. If moving TO cancelled, RESTORE stock
-      if (status === 'cancelled' && currentOrder.status !== 'cancelled') {
-        if (currentOrder.order_items) {
-          for (const item of currentOrder.order_items) {
-            if (item.variant_id) {
-               // Restore variant stock
-               const { data: variant } = await supabase.from('product_variants').select('stock').eq('id', item.variant_id).single();
-               if (variant) {
-                 await supabase.from('product_variants').update({ stock: variant.stock + item.quantity }).eq('id', item.variant_id);
-               }
-            } else if (item.product_id) {
-               // Restore main product stock
-               const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
-               if (product) {
-                 await supabase.from('products').update({ stock: product.stock + item.quantity }).eq('id', item.product_id);
-               }
-            }
-          }
-        }
-      }
-      
-      // 2. If moving FROM cancelled TO something else, DEDUCT stock
-      if (status !== 'cancelled' && currentOrder.status === 'cancelled') {
-        if (currentOrder.order_items) {
-          for (const item of currentOrder.order_items) {
-            if (item.variant_id) {
-               // Deduct variant stock
-               const { data: variant } = await supabase.from('product_variants').select('stock').eq('id', item.variant_id).single();
-               if (variant) {
-                 await supabase.from('product_variants').update({ stock: Math.max(0, variant.stock - item.quantity) }).eq('id', item.variant_id);
-               }
-            } else if (item.product_id) {
-               // Deduct main product stock
-               const { data: product } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
-               if (product) {
-                 await supabase.from('products').update({ stock: Math.max(0, product.stock - item.quantity) }).eq('id', item.product_id);
-               }
-            }
-          }
-        }
-      }
-
       const { error } = await supabase
         .from('orders')
         .update({ status })

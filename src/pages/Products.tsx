@@ -40,6 +40,14 @@ export default function Products() {
     fetchData();
   }, []);
 
+  // Sync total stock from variants
+  useEffect(() => {
+    if (formData.variants.length > 0) {
+      const totalStock = formData.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
+      setFormData(prev => ({ ...prev, stock: totalStock.toString() }));
+    }
+  }, [formData.variants]);
+
   async function fetchData() {
     try {
       const [productsRes, categoriesRes] = await Promise.all([
@@ -137,7 +145,7 @@ export default function Products() {
       toast.error('Price is required');
       return;
     }
-    if (!formData.stock) {
+    if (!formData.stock && formData.variants.length === 0) {
       toast.error('Stock is required');
       return;
     }
@@ -581,13 +589,23 @@ export default function Products() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Stock</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  />
+                  {formData.variants.length > 0 ? (
+                    <div className="mt-1 block w-full bg-indigo-50 border border-indigo-100 rounded-md py-2 px-3 text-indigo-700 font-bold">
+                      <div className="flex justify-between items-center">
+                        <span>{formData.stock}</span>
+                        <span className="text-[10px] bg-indigo-100 px-2 py-0.5 rounded-full uppercase">Computed</span>
+                      </div>
+                      <p className="text-[9px] mt-1 text-indigo-500 font-medium">إجمالي مخزون المتغيرات</p>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.stock}
+                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Category</label>
