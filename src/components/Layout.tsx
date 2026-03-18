@@ -12,10 +12,13 @@ import {
   Image
 } from 'lucide-react';
 import { ExpandableTabs } from './ui/expandable-tabs';
-import { supabase } from '../lib/supabase';
+import Pusher from 'pusher-js';
 import toast from 'react-hot-toast';
 
 const NOTIFICATION_SOUND = "https://res.cloudinary.com/ddsikz7wq/video/upload/v1773411583/%D9%86%D8%BA%D9%85%D9%87_%D8%B1%D8%B3%D8%A7%D8%A6%D9%84_%D8%A7%D9%8A%D9%81%D9%88%D9%86_%D8%A7%D9%84%D8%A7%D8%B5%D9%84%D9%8A%D9%87_%D8%A7%D9%84%D8%A7%D9%8A%D9%81%D9%88%D9%86_11%D8%A8%D8%B1%D9%88_2021_320_qa8kbe.mp3";
+
+const PUSHER_KEY = '6f398ffd3b06e741d29f';
+const PUSHER_CLUSTER = 'eu';
 
 const navItems = [
   { name: 'الرئيسية', path: '/', icon: LayoutDashboard },
@@ -37,47 +40,36 @@ export default function Layout() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Initialize audio
     audioRef.current = new Audio(NOTIFICATION_SOUND);
     audioRef.current.load();
 
-    // Set up real-time listener for new orders
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'orders',
-        },
-        (payload) => {
-          console.log('New order received!', payload);
-          setHasNewOrder(true);
-          
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('طلبية جديدة وصلتك!', {
-              body: `رقم الطلبية: ${payload.new.id}`,
-              icon: '/logo.png',
-            });
-          }
+    const pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
+    const channel = pusher.subscribe('orders-channel');
 
-          toast.success('طلبية جديدة وصلتك!', {
-            icon: '🛍️',
-            duration: 5000,
-          });
-          
-          if (audioRef.current) {
-            audioRef.current.play().catch(err => {
-              console.error('Audio play failed:', err);
-            });
-          }
-        }
-      )
-      .subscribe();
+    channel.bind('new-order', (data: any) => {
+      console.log('New order received via Pusher!', data);
+      setHasNewOrder(true);
+
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('طلبية جديدة وصلتك!', {
+          body: `الزبون: ${data.customer_name} - ${data.total_price} د.ج`,
+          icon: '/logo.png',
+        });
+      }
+
+      toast.success('طلبية جديدة وصلتك!', { icon: '🛍️', duration: 5000 });
+
+      if (audioRef.current) {
+        audioRef.current.play().catch(err => {
+          console.error('Audio play failed:', err);
+        });
+      }
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      channel.unbind_all();
+      pusher.unsubscribe('orders-channel');
+      pusher.disconnect();
     };
   }, []);
 
@@ -103,11 +95,7 @@ export default function Layout() {
     }
   };
 
-  const tabs = navItems.map(item => ({
-    title: item.name,
-    icon: item.icon
-  }));
-
+  const tabs = navItems.map(item => ({ title: item.name, icon: item.icon }));
   const activeIndex = navItems.findIndex(item => item.path === location.pathname);
 
   const handleTabChange = (index: number | null) => {
@@ -120,7 +108,6 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      {/* Top Header & Navigation */}
       <header className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white/80 backdrop-blur-md shadow-sm">
         <div className="flex h-20 items-center px-4 sm:px-6 justify-between max-w-7xl mx-auto w-full gap-4">
           <div className="flex items-center gap-4 flex-shrink-0">
@@ -169,22 +156,15 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 max-w-7xl mx-auto w-full">
         <div className="flex-1 p-4 sm:p-8">
           <Outlet />
         </div>
       </main>
 
-      {/* Style for hiding scrollbar */}
       <style>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );

@@ -1,19 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { uploadImage, deleteImage } from '../lib/cloudinary';
 import toast from 'react-hot-toast';
-import { 
-  Plus, 
-  Trash2, 
-  Image as ImageIcon, 
-  Loader2, 
-  ExternalLink,
-  Eye,
-  EyeOff,
-  GripVertical,
-  Link as LinkIcon,
-  Type
-} from 'lucide-react';
+import { Plus, Trash2, Image as ImageIcon, Loader2, EyeOff } from 'lucide-react';
 
 interface Banner {
   id: string;
@@ -31,10 +20,7 @@ export default function Banners() {
   const [uploading, setUploading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
-  const [form, setForm] = useState({
-    is_active: true,
-    image_url: ''
-  });
+  const [form, setForm] = useState({ is_active: true, image_url: '' });
 
   useEffect(() => {
     fetchBanners();
@@ -42,12 +28,7 @@ export default function Banners() {
 
   async function fetchBanners() {
     try {
-      const { data, error } = await supabase
-        .from('banners')
-        .select('*')
-        .order('order_index', { ascending: true });
-      
-      if (error) throw error;
+      const data = await db.banners.list();
       setBanners(data || []);
     } catch (error: any) {
       toast.error('حدث خطأ أثناء تحميل البنرات: ' + error.message);
@@ -59,7 +40,6 @@ export default function Banners() {
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploading(true);
     try {
       const url = await uploadImage(file);
@@ -67,7 +47,7 @@ export default function Banners() {
         setForm({ ...form, image_url: url });
         toast.success('تم رفع الصورة بنجاح');
       }
-    } catch (error) {
+    } catch {
       toast.error('فشل في رفع الصورة');
     } finally {
       setUploading(false);
@@ -80,28 +60,13 @@ export default function Banners() {
       toast.error('يرجى اختيار صورة للبنر');
       return;
     }
-
     setLoading(true);
     try {
       if (editingBanner) {
-        const { error } = await supabase
-          .from('banners')
-          .update({
-            is_active: form.is_active,
-            image_url: form.image_url
-          })
-          .eq('id', editingBanner.id);
-        if (error) throw error;
+        await db.banners.update(editingBanner.id, { is_active: form.is_active, image_url: form.image_url });
         toast.success('تم تحديث البنر بنجاح');
       } else {
-        const { error } = await supabase
-          .from('banners')
-          .insert([{
-            is_active: form.is_active,
-            image_url: form.image_url,
-            order_index: banners.length
-          }]);
-        if (error) throw error;
+        await db.banners.create({ is_active: form.is_active, image_url: form.image_url, order_index: banners.length });
         toast.success('تم إضافة البنر بنجاح');
       }
       closeModal();
@@ -115,18 +80,8 @@ export default function Banners() {
 
   async function handleDelete(banner: Banner) {
     if (!confirm('هل أنت متأكد من حذف هذا البنر؟')) return;
-
     try {
-      // 1. Delete from Cloudinary
-      await deleteImage(banner.image_url);
-      
-      // 2. Delete from Supabase
-      const { error } = await supabase
-        .from('banners')
-        .delete()
-        .eq('id', banner.id);
-      
-      if (error) throw error;
+      await db.banners.delete(banner.id);
       toast.success('تم حذف البنر');
       fetchBanners();
     } catch (error: any) {
@@ -137,16 +92,10 @@ export default function Banners() {
   function openModal(banner: Banner | null = null) {
     if (banner) {
       setEditingBanner(banner);
-      setForm({
-        is_active: banner.is_active,
-        image_url: banner.image_url
-      });
+      setForm({ is_active: Boolean(banner.is_active), image_url: banner.image_url });
     } else {
       setEditingBanner(null);
-      setForm({
-        is_active: true,
-        image_url: ''
-      });
+      setForm({ is_active: true, image_url: '' });
     }
     setIsModalOpen(true);
   }
@@ -209,10 +158,8 @@ export default function Banners() {
                   </div>
                 )}
               </div>
-              <div className="p-4 space-y-3">
-                <div className="flex justify-between items-start gap-2">
-                  <span className="text-[10px] font-mono text-gray-400">#{banner.order_index}</span>
-                </div>
+              <div className="p-4">
+                <span className="text-[10px] font-mono text-gray-400">#{banner.order_index}</span>
               </div>
             </div>
           ))
@@ -261,17 +208,15 @@ export default function Banners() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <span className="text-sm font-bold text-gray-700">تفعيل البنر</span>
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, is_active: !form.is_active })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_active ? 'bg-indigo-600' : 'bg-gray-200'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <span className="text-sm font-bold text-gray-700">تفعيل البنر</span>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, is_active: !form.is_active })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_active ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
 
               <div className="flex gap-3 pt-4">

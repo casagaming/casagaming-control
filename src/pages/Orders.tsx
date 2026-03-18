@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { Order } from '../types/supabase';
 import { format } from 'date-fns';
 import { Eye, Search, Printer, CheckCircle2, XCircle, Clock, Truck, PackageCheck, AlertCircle } from 'lucide-react';
@@ -20,26 +20,7 @@ export default function Orders() {
 
   async function fetchOrders() {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            *,
-            product:products (
-              name_en,
-              image_url
-            ),
-            variant:product_variants (
-              id,
-              name_en,
-              image_url
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await db.orders.list();
       setOrders(data || []);
     } catch (error: any) {
       toast.error(error.message);
@@ -50,12 +31,7 @@ export default function Orders() {
 
   async function updateOrderStatus(id: string, status: string) {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status })
-        .eq('id', id);
-
-      if (error) throw error;
+      await db.orders.updateStatus(id, status);
       toast.success(`Order ${status} successfully`);
       fetchOrders();
       if (selectedOrder && selectedOrder.id === id) {
@@ -118,7 +94,6 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b border-gray-200">
         {[
           { id: 'all', label: 'الكل', count: orders.length },
@@ -223,11 +198,9 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* Order Details Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 print:p-0">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col print:shadow-none print:max-h-full print:rounded-none">
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center print:hidden">
               <h2 className="text-xl font-bold text-gray-900">تفاصيل الطلب #{selectedOrder.id.slice(0, 8).toUpperCase()}</h2>
               <div className="flex items-center gap-2">
@@ -241,7 +214,6 @@ export default function Orders() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* Customer Info */}
               <div className="grid grid-cols-2 gap-6 pb-6 border-b border-gray-100">
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">تفاصيل الزبون</p>
@@ -255,7 +227,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Status Actions */}
               <div className="space-y-3 print:hidden">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">تغيير حالة الطلب</p>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -280,7 +251,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Order Items */}
               <div className="space-y-4">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">المنتجات المطلوبة</p>
                 <div className="bg-gray-50 rounded-2xl p-4 space-y-4 border border-gray-100">
@@ -312,7 +282,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Total Calculation */}
               <div className="pt-6 border-t border-gray-100 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 font-medium">سعر المنتجات</span>
@@ -329,7 +298,6 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Print Footer Hidden normally */}
             <div className="hidden print:block p-8 border-t border-gray-100">
                <p className="text-center font-bold text-gray-900 text-lg">CASA GAMING</p>
                <p className="text-center text-sm text-gray-500">نشكركم على اختياركم متجرنا</p>

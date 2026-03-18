@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import toast from 'react-hot-toast';
 import { uploadImage, deleteImage } from '../lib/cloudinary';
-import { Upload, X, Loader2, Store, Phone, Mail, MapPin, Facebook, Instagram, Twitter, MessageCircle, Image as ImageIcon, Plus } from 'lucide-react';
+import { Upload, X, Loader2, Store, Phone, Mail, MapPin, Facebook, Instagram, MessageCircle } from 'lucide-react';
 import { StoreConfig } from '../types/supabase';
 
 export default function Settings() {
@@ -14,6 +14,7 @@ export default function Settings() {
     id: 1,
     store_name: 'CASA GAMING',
     logo_url: '',
+    hero_images: [],
     contact_phone: '',
     contact_email: '',
     contact_address: '',
@@ -29,17 +30,8 @@ export default function Settings() {
 
   async function fetchSettings() {
     try {
-      const { data, error } = await supabase
-        .from('store_config')
-        .select('*')
-        .eq('id', 1)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
-
-      if (data) {
-        setConfig(data);
-      }
+      const data = await db.storeConfig.get();
+      if (data) setConfig(data);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -50,22 +42,18 @@ export default function Settings() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploadingLogo(true);
     try {
       const url = await uploadImage(file);
       if (url) {
-        if (config.logo_url) {
-          await deleteImage(config.logo_url);
-        }
+        if (config.logo_url) await deleteImage(config.logo_url);
         setConfig({ ...config, logo_url: url });
         toast.success('تم رفع الشعار بنجاح');
       } else {
         toast.error('فشل في رفع الشعار');
       }
     } catch (error: any) {
-      console.error('Logo upload error:', error);
-      toast.error('حدث خطأ أثناء الرفع: ' + (error.message || ''));
+      toast.error('حدث خطأ: ' + (error.message || ''));
     } finally {
       setUploadingLogo(false);
     }
@@ -78,7 +66,7 @@ export default function Settings() {
       await deleteImage(config.logo_url);
       setConfig({ ...config, logo_url: '' });
       toast.success('تم حذف الشعار');
-    } catch (error) {
+    } catch {
       toast.error('فشل في حذف الشعار');
     } finally {
       setUploadingLogo(false);
@@ -89,15 +77,7 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('store_config')
-        .upsert({ 
-          ...config, 
-          // Ensure we don't send hero_image_url if we've renamed it in DB
-          updated_at: new Date().toISOString() 
-        });
-      
-      if (error) throw error;
+      await db.storeConfig.save(config);
       toast.success('تم حفظ الإعدادات بنجاح');
     } catch (error: any) {
       toast.error(error.message);
@@ -124,7 +104,6 @@ export default function Settings() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Basic Information */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50/50">
             <h2 className="text-lg font-semibold text-gray-900">هوية المتجر</h2>
@@ -145,10 +124,32 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+
+            {/* Logo Upload */}
+            <div className="space-y-3">
+              <label className="block text-sm font-bold text-gray-700">شعار المتجر</label>
+              {config.logo_url ? (
+                <div className="relative inline-block group">
+                  <img src={config.logo_url} alt="Logo" className="h-24 w-24 object-cover rounded-xl border-2 border-gray-100 shadow-sm" />
+                  <button
+                    type="button"
+                    onClick={handleRemoveLogo}
+                    disabled={uploadingLogo}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer hover:bg-gray-50">
+                  {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-indigo-600" /> : <Upload className="w-6 h-6 text-gray-400" />}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                </label>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Contact Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
@@ -251,7 +252,7 @@ export default function Settings() {
           <button
             type="submit"
             disabled={saving || uploadingLogo}
-            className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 py-4 px-10 text-base font-black hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 py-4 px-10 text-base font-black hover:bg-indigo-700 disabled:opacity-50 transition-all"
           >
             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
             {saving ? 'جاري الحفظ...' : 'حفظ إعدادات المتجر'}

@@ -2,7 +2,6 @@ const cloudName = 'ddsikz7wq';
 const apiKey = '728859884445323';
 const apiSecret = 'qJBcAxrhV_loi85MYP8OK_F_IcY';
 
-// Helper function to generate SHA-1 signature for Cloudinary Authentication
 async function generateSignature(paramsToSign: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(paramsToSign);
   const hashBuffer = await crypto.subtle.digest('SHA-1', msgBuffer);
@@ -15,7 +14,6 @@ export async function uploadImage(file: File): Promise<string | null> {
     const timestamp = Math.round(new Date().getTime() / 1000).toString();
     const folder = 'kace_gaming';
     
-    // Cloudinary requires parameters to be sorted alphabetically for the signature
     const stringToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
     const signature = await generateSignature(stringToSign);
 
@@ -26,7 +24,6 @@ export async function uploadImage(file: File): Promise<string | null> {
     formData.append('signature', signature);
     formData.append('folder', folder);
 
-    
     const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
       method: 'POST',
       body: formData,
@@ -55,11 +52,10 @@ export async function deleteImage(url: string | null) {
     
     const pathParts = parts.slice(uploadIndex + 2);
     const fullPath = pathParts.join('/');
-    const publicId = fullPath.split('.')[0]; // e.g., folder/image
+    const publicId = fullPath.split('.')[0];
     
     const timestamp = Math.round(new Date().getTime() / 1000).toString();
     
-    // Cloudinary requires parameters to be sorted alphabetically for the signature
     const stringToSign = `public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
     const signature = await generateSignature(stringToSign);
 

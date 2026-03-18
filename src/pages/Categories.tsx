@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { Category } from '../types/supabase';
 import { Plus, Edit, Trash2, Search, Upload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -33,12 +33,7 @@ export default function Categories() {
 
   async function fetchCategories() {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await db.categories.list();
       setCategories(data || []);
     } catch (error: any) {
       toast.error(error.message);
@@ -57,11 +52,7 @@ export default function Categories() {
       });
     } else {
       setEditingCategory(null);
-      setFormData({
-        name_en: '',
-        slug: '',
-        image_url: '',
-      });
+      setFormData({ name_en: '', slug: '', image_url: '' });
     }
     setIsModalOpen(true);
   }
@@ -73,7 +64,6 @@ export default function Categories() {
       const file = e.target.files[0];
       const url = await uploadImage(file);
       if (url) {
-        // If replacing an existing image in the form, delete the old one from Cloudinary
         if (formData.image_url && formData.image_url !== editingCategory?.image_url) {
           await deleteImage(formData.image_url);
         }
@@ -83,8 +73,7 @@ export default function Categories() {
         toast.error('فشل في رفع الصورة');
       }
     } catch (error: any) {
-      console.error('Upload error:', error);
-      toast.error('حدث خطأ أثناء الرفع: ' + (error.message || ''));
+      toast.error('حدث خطأ: ' + (error.message || ''));
     } finally {
       setUploading(false);
     }
@@ -92,39 +81,27 @@ export default function Categories() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
     if (!formData.name_en.trim()) {
       toast.error('Name is required');
       return;
     }
-
     try {
       const generatedSlug = formData.name_en.trim().toLowerCase().replace(/\s+/g, '-');
       const categoryData = {
-        name_ar: formData.name_en, // Auto-fill Arabic field with English to satisfy DB constraints
+        name_ar: formData.name_en,
         name_en: formData.name_en,
         slug: formData.slug || generatedSlug,
         image_url: formData.image_url || null,
       };
 
       if (editingCategory) {
-        const { error } = await supabase
-          .from('categories')
-          .update(categoryData)
-          .eq('id', editingCategory.id);
-        if (error) throw error;
-        
-        // If the image was changed, delete the old one from Cloudinary
+        await db.categories.update(editingCategory.id, categoryData);
         if (editingCategory.image_url && editingCategory.image_url !== formData.image_url) {
           await deleteImage(editingCategory.image_url);
         }
-        
         toast.success('Category updated successfully');
       } else {
-        const { error } = await supabase
-          .from('categories')
-          .insert([categoryData]);
-        if (error) throw error;
+        await db.categories.create(categoryData);
         toast.success('Category created successfully');
       }
 
@@ -136,28 +113,14 @@ export default function Categories() {
   }
 
   function confirmDelete(category: Category) {
-    setDeleteModal({
-      isOpen: true,
-      id: category.id,
-      imageUrl: category.image_url,
-      isDeleting: false
-    });
+    setDeleteModal({ isOpen: true, id: category.id, imageUrl: category.image_url, isDeleting: false });
   }
 
   async function handleDelete() {
     if (!deleteModal.id) return;
     setDeleteModal(prev => ({ ...prev, isDeleting: true }));
-    
     try {
-      // Delete image from Cloudinary first
-      if (deleteModal.imageUrl) {
-        await deleteImage(deleteModal.imageUrl);
-      }
-      
-      // Delete from Supabase
-      const { error } = await supabase.from('categories').delete().eq('id', deleteModal.id);
-      if (error) throw error;
-      
+      await db.categories.delete(deleteModal.id);
       toast.success('Category deleted successfully');
       fetchCategories();
     } catch (error: any) {
@@ -274,7 +237,6 @@ export default function Categories() {
                 />
               </div>
 
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category Image</label>
                 {formData.image_url ? (
@@ -287,15 +249,6 @@ export default function Categories() {
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <div className="mt-2 text-center">
-                       <button 
-                         type="button" 
-                         onClick={() => setFormData({ ...formData, image_url: '' })}
-                         className="text-xs text-red-600 font-bold hover:underline"
-                       >
-                         تغيير الصورة
-                       </button>
-                    </div>
                   </div>
                 ) : (
                   <label className="flex flex-col items-center justify-center h-32 w-full border-2 border-gray-300 border-dashed rounded-xl cursor-pointer hover:bg-gray-50 hover:border-indigo-300 transition-all group">
@@ -308,7 +261,6 @@ export default function Categories() {
                       <p className="mt-2 text-sm text-gray-600 font-medium">
                         {uploading ? 'جاري الرفع...' : 'اضغط لرفع صورة الصنف'}
                       </p>
-                      <p className="text-xs text-gray-400">PNG, JPG, SVG</p>
                     </div>
                     <input 
                       type="file" 
@@ -326,14 +278,14 @@ export default function Categories() {
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={uploading}
-                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
                   Save
                 </button>
@@ -346,7 +298,7 @@ export default function Categories() {
       <ConfirmModal
         isOpen={deleteModal.isOpen}
         title="حذف التصنيف"
-        message="هل أنت متأكد أنك تريد حذف هذا التصنيف؟ سيتم حذف الصورة المرتبطة به نهائياً ولن تتمكن من التراجع عن هذا الإجراء."
+        message="هل أنت متأكد أنك تريد حذف هذا التصنيف؟ سيتم حذف الصورة المرتبطة به نهائياً."
         onConfirm={handleDelete}
         onCancel={() => setDeleteModal({ isOpen: false, id: null, imageUrl: null, isDeleting: false })}
         isDeleting={deleteModal.isDeleting}

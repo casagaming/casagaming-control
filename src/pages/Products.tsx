@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { Product, Category, ProductVariant } from '../types/supabase';
 import { Plus, Edit, Trash2, Search, Upload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -16,31 +16,32 @@ export default function Products() {
   const [uploading, setUploading] = useState(false);
 
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; id: string | null; images: string[]; isDeleting: boolean }>({
-    isOpen: false,
-    id: null,
-    images: [],
-    isDeleting: false
+    isOpen: false, id: null, images: [], isDeleting: false
   });
 
   const [formData, setFormData] = useState({
     name_en: '',
+    slug: '',
     description_en: '',
     price: '',
     original_price: '',
     stock: '',
     category_id: '',
     is_featured: false,
-    is_new: true, // Default to true for new products
+    is_new: true,
     is_sale: false,
     images: [] as string[],
     variants: [] as Omit<ProductVariant, 'id' | 'product_id' | 'created_at'>[],
   });
 
+  function generateSlug(name: string): string {
+    return name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  }
+
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Sync total stock from variants
   useEffect(() => {
     if (formData.variants.length > 0) {
       const totalStock = formData.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
@@ -50,16 +51,12 @@ export default function Products() {
 
   async function fetchData() {
     try {
-      const [productsRes, categoriesRes] = await Promise.all([
-        supabase.from('products').select('*, category:categories(name_en, name_ar), variants:product_variants(*)').order('created_at', { ascending: false }),
-        supabase.from('categories').select('*').order('name_en'),
+      const [productsData, categoriesData] = await Promise.all([
+        db.products.list(),
+        db.categories.list(),
       ]);
-
-      if (productsRes.error) throw productsRes.error;
-      if (categoriesRes.error) throw categoriesRes.error;
-
-      setProducts(productsRes.data || []);
-      setCategories(categoriesRes.data || []);
+      setProducts(productsData || []);
+      setCategories(categoriesData || []);
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -72,6 +69,7 @@ export default function Products() {
       setEditingProduct(product);
       setFormData({
         name_en: product.name_en,
+        slug: (product as any).slug || generateSlug(product.name_en),
         description_en: product.description_en || '',
         price: product.price.toString(),
         original_price: product.original_price?.toString() || '',
@@ -86,17 +84,9 @@ export default function Products() {
     } else {
       setEditingProduct(null);
       setFormData({
-        name_en: '',
-        description_en: '',
-        price: '',
-        original_price: '',
-        stock: '0',
-        category_id: '',
-        is_featured: false,
-        is_new: true, // Default to true for new products
-        is_sale: false,
-        images: [],
-        variants: [],
+        name_en: '', slug: '', description_en: '', price: '', original_price: '',
+        stock: '0', category_id: '', is_featured: false, is_new: true, is_sale: false,
+        images: [], variants: [],
       });
     }
     setIsModalOpen(true);
@@ -108,12 +98,11 @@ export default function Products() {
     try {
       const newImages = [...formData.images];
       for (let i = 0; i < e.target.files.length; i++) {
-        const file = e.target.files[i];
-        const url = await uploadImage(file);
+        const url = await uploadImage(e.target.files[i]);
         if (url) newImages.push(url);
       }
       setFormData(prev => ({ ...prev, images: newImages }));
-    } catch (error) {
+    } catch {
       toast.error('Failed to upload image');
     } finally {
       setUploading(false);
@@ -122,95 +111,41 @@ export default function Products() {
 
   async function handleRemoveImage(index: number) {
     const urlToRemove = formData.images[index];
-    
-    // If it's a new image (not saved yet) or we are editing, we can delete it from Cloudinary right away
-    // to save space, but if they cancel the edit, the image is gone.
-    // For simplicity, we delete it immediately.
     await deleteImage(urlToRemove);
-    
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index)
-    }));
+    setFormData(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    if (!formData.name_en.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    if (!formData.price) {
-      toast.error('Price is required');
-      return;
-    }
-    if (!formData.stock && formData.variants.length === 0) {
-      toast.error('Stock is required');
-      return;
-    }
+    if (!formData.name_en.trim()) { toast.error('Name is required'); return; }
+    if (!formData.price) { toast.error('Price is required'); return; }
 
     try {
       const productData = {
-        name_ar: formData.name_en, // Auto-fill Arabic field with English to satisfy DB constraints
+        name_ar: formData.name_en,
         name_en: formData.name_en,
-        description_ar: formData.description_en, // Auto-fill Arabic field with English
+        slug: formData.slug || generateSlug(formData.name_en),
+        description_ar: formData.description_en,
         description_en: formData.description_en,
         price: Number(formData.price),
         original_price: formData.original_price ? Number(formData.original_price) : null,
         stock: Number(formData.stock),
         category_id: formData.category_id || null,
         is_featured: formData.is_featured,
+        is_new: formData.is_new,
         is_sale: formData.is_sale,
-        image_url: formData.images, // Used as the primary array
-        images: formData.images,    // Redundant array mapping per user schema
+        image_url: formData.images,
+        images: formData.images,
+        variants: formData.variants,
       };
 
-      let finalProductId = editingProduct?.id;
-
       if (editingProduct) {
-        const { error } = await supabase
-          .from('products')
-          .update(productData)
-          .eq('id', editingProduct.id);
-        if (error) throw error;
-        
-        // Find images that were removed during edit and delete them from Cloudinary
-        const oldImages = Array.isArray(editingProduct.image_url) ? editingProduct.image_url : [];
-        const removedImages = oldImages.filter(url => !formData.images.includes(url));
-        for (const url of removedImages) {
-          await deleteImage(url);
-        }
+        await db.products.update(editingProduct.id, productData);
+        toast.success('Product updated successfully');
       } else {
-        const { data: newProdData, error } = await supabase
-          .from('products')
-          .insert([productData])
-          .select('id')
-          .single();
-        if (error) throw error;
-        finalProductId = newProdData.id;
+        await db.products.create(productData);
+        toast.success('Product created successfully');
       }
-
-      // Handle Variants Update
-      if (finalProductId) {
-         // Delete existing variants
-         await supabase.from('product_variants').delete().eq('product_id', finalProductId);
-         
-         // Insert new variants
-         if (formData.variants.length > 0) {
-            const variantsToInsert = formData.variants.map(v => ({
-              product_id: finalProductId,
-              name_en: v.name_en,
-              name_ar: v.name_ar,
-              stock: v.stock,
-              image_url: v.image_url
-            }));
-            const { error: variantError } = await supabase.from('product_variants').insert(variantsToInsert);
-            if (variantError) throw variantError;
-         }
-      }
-
-       toast.success(editingProduct ? 'Product updated successfully' : 'Product created successfully');
 
       setIsModalOpen(false);
       fetchData();
@@ -220,35 +155,19 @@ export default function Products() {
   }
 
   function confirmDelete(product: Product) {
-    setDeleteModal({
-      isOpen: true,
-      id: product.id,
-      images: Array.isArray(product.image_url) ? product.image_url : [],
-      isDeleting: false
-    });
+    setDeleteModal({ isOpen: true, id: product.id, images: Array.isArray(product.image_url) ? product.image_url : [], isDeleting: false });
   }
 
   async function handleDelete() {
     if (!deleteModal.id) return;
     setDeleteModal(prev => ({ ...prev, isDeleting: true }));
-    
     try {
-      // Delete all associated images from Cloudinary first
-      for (const url of deleteModal.images) {
-        await deleteImage(url);
-      }
-      
-      // Delete from Supabase
-      const { error } = await supabase.from('products').delete().eq('id', deleteModal.id);
-      if (error) throw error;
-      
+      await db.products.delete(deleteModal.id);
       toast.success('Product deleted successfully');
       fetchData();
     } catch (error: any) {
-      if (error.message?.includes('foreign key constraint')) {
-        toast.error('لا يمكن حذف هذا المنتج لأنه مرتبط بطلبات سابقة. يرجى مراجعة التعليمات لتعديل قاعدة البيانات أو قم بتعطيل المنتج بدلاً من حذفه.', {
-          duration: 6000,
-        });
+      if (error.message?.includes('foreign key')) {
+        toast.error('لا يمكن حذف هذا المنتج لأنه مرتبط بطلبات سابقة.', { duration: 6000 });
       } else {
         toast.error(error.message);
       }
@@ -375,27 +294,106 @@ export default function Products() {
               {editingProduct ? 'Edit Product' : 'Add Product'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Name</label>
+                <input
+                  type="text"
+                  value={formData.name_en}
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    setFormData(prev => ({
+                      ...prev,
+                      name_en: name,
+                      slug: generateSlug(name),
+                    }));
+                  }}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <textarea
+                  value={formData.description_en}
+                  onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Name</label>
+                  <label className="block text-sm font-medium text-gray-700">Price (د.ج)</label>
                   <input
-                    type="text"
-                    value={formData.name_en}
-                    onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Original Price</label>
+                  <input
+                    type="number"
+                    value={formData.original_price}
+                    onChange={(e) => setFormData({ ...formData, original_price: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-4">
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Description</label>
-                  <textarea
-                    value={formData.description_en}
-                    onChange={(e) => setFormData({ ...formData, description_en: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    rows={3}
-                  />
+                  <label className={`block text-sm font-medium ${formData.variants.length > 0 ? 'text-gray-400' : 'text-gray-700'}`}>
+                    الكمية
+                    {formData.variants.length > 0 && (
+                      <span className="ml-2 text-xs font-normal text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">
+                        تُحسب من المتغيرات
+                      </span>
+                    )}
+                  </label>
+                  {formData.variants.length > 0 ? (
+                    <div className="mt-1 flex items-center gap-2 border border-dashed border-gray-200 rounded-md py-2 px-3 bg-gray-50 cursor-not-allowed">
+                      <span className="text-lg font-bold text-indigo-600">{formData.stock}</span>
+                      <span className="text-xs text-gray-400">= مجموع كميات المتغيرات</span>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      value={formData.stock}
+                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  )}
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Category</label>
+                  <select
+                    value={formData.category_id}
+                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">No Category</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name_en}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                {[
+                  { key: 'is_featured', label: 'مميز' },
+                  { key: 'is_new', label: 'جديد' },
+                  { key: 'is_sale', label: 'تخفيض' },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData[key as keyof typeof formData] as boolean}
+                      onChange={(e) => setFormData({ ...formData, [key]: e.target.checked })}
+                      className="rounded border-gray-300 text-indigo-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{label}</span>
+                  </label>
+                ))}
               </div>
               
               <div>
@@ -413,31 +411,16 @@ export default function Products() {
                       </button>
                     </div>
                   ))}
-                  
                   <div className="aspect-square flex justify-center items-center border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition-colors relative">
                     <div className="text-center">
-                      {uploading ? (
-                        <Loader2 className="mx-auto h-8 w-8 text-indigo-600 animate-spin" />
-                      ) : (
-                        <Upload className="mx-auto h-8 w-8 text-gray-400" />
-                      )}
-                      <span className="mt-2 block text-sm font-medium text-gray-600">
-                        {uploading ? 'جاري الرفع...' : 'إضافة صورة'}
-                      </span>
+                      {uploading ? <Loader2 className="mx-auto h-8 w-8 text-indigo-600 animate-spin" /> : <Upload className="mx-auto h-8 w-8 text-gray-400" />}
+                      <span className="mt-2 block text-sm font-medium text-gray-600">{uploading ? 'جاري الرفع...' : 'إضافة صورة'}</span>
                     </div>
-                    <input 
-                      type="file" 
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      disabled={uploading}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                    />
+                    <input type="file" multiple accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
                   </div>
                 </div>
               </div>
 
-              {/* Variants Section */}
               <div className="border-t border-gray-200 pt-4 mt-4">
                 <div className="flex justify-between items-center mb-4">
                    <h3 className="text-lg font-bold text-gray-900">Variables/Colors (Optional)</h3>
@@ -450,28 +433,22 @@ export default function Products() {
                      Add Variant
                    </button>
                 </div>
-                
                 <div className="space-y-4">
                   {formData.variants.map((variant, index) => (
-                    <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4 relative group">
+                    <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4 relative">
                       <button
                         type="button"
                         onClick={() => {
-                          const url = variant.image_url;
-                          if (url) deleteImage(url); // Cleanup Cloudinary
-                          setFormData(prev => ({
-                            ...prev,
-                            variants: prev.variants.filter((_, i) => i !== index)
-                          }));
+                          if (variant.image_url) deleteImage(variant.image_url);
+                          setFormData(prev => ({ ...prev, variants: prev.variants.filter((_, i) => i !== index) }));
                         }}
                         className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                      
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-xs font-bold text-gray-700 mb-1">Variant Name (e.g. Red / أحمر)</label>
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Variant Name</label>
                           <input
                             type="text"
                             placeholder="e.g. Red / 16GB"
@@ -479,18 +456,17 @@ export default function Products() {
                             onChange={(e) => {
                                const newVariants = [...formData.variants];
                                newVariants[index].name_en = e.target.value;
-                               newVariants[index].name_ar = e.target.value; // Mirror to arabic
+                               newVariants[index].name_ar = e.target.value;
                                setFormData(prev => ({ ...prev, variants: newVariants }));
                             }}
                             className="w-full border border-gray-300 rounded-md py-1.5 px-3 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-gray-700 mb-1">Stock (المخزون)</label>
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Stock</label>
                           <input
                             type="number"
                             min="0"
-                            placeholder="0"
                             value={variant.stock === undefined ? '' : variant.stock}
                             onChange={(e) => {
                                const newVariants = [...formData.variants];
@@ -501,179 +477,65 @@ export default function Products() {
                           />
                         </div>
                         <div>
-                           <label className="block text-xs font-bold text-gray-700 mb-1">Variant Image</label>
-                           {variant.image_url ? (
-                             <div className="flex items-center gap-3">
-                               <img src={variant.image_url} alt="Variant" className="h-10 w-10 rounded-md object-cover border border-gray-200" />
-                               <button 
-                                 type="button" 
-                                 className="text-xs text-red-600 font-bold hover:underline"
-                                 onClick={() => {
-                                   deleteImage(variant.image_url);
-                                   const newVariants = [...formData.variants];
-                                   newVariants[index].image_url = null;
-                                   setFormData(prev => ({...prev, variants: newVariants}));
-                                 }}
-                               >
-                                 Remove
-                               </button>
-                             </div>
-                           ) : (
-                             <label className="flex items-center justify-center w-full py-2 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-white transition-colors relative">
-                               {uploading ? (
-                                 <div className="flex items-center gap-2">
-                                   <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                                   <span className="text-xs font-bold text-gray-500">جاري الرفع...</span>
-                                 </div>
-                               ) : (
-                                 <span className="text-xs font-bold text-indigo-600">رفع صورة المتغير</span>
-                               )}
-                               <input 
-                                 type="file" 
-                                 className="hidden" 
-                                 accept="image/*" 
-
-                                 onChange={async (e) => {
-                                   if (!e.target.files?.[0]) return;
-                                   setUploading(true);
-                                   try {
-                                     const url = await uploadImage(e.target.files[0]);
-                                     if (url) {
-                                       const newVariants = [...formData.variants];
-                                       newVariants[index].image_url = url;
-                                       setFormData(prev => ({ ...prev, variants: newVariants }));
-                                     }
-                                   } catch(err) {
-                                     toast.error('Failed to upload variant image');
-                                   } finally {
-                                     setUploading(false);
-                                   }
-                                 }}
-                               />
-                             </label>
-                           )}
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Variant Image</label>
+                          {variant.image_url ? (
+                            <div className="flex items-center gap-3">
+                              <img src={variant.image_url} alt="Variant" className="h-10 w-10 rounded-md object-cover border border-gray-200" />
+                              <button 
+                                type="button" 
+                                className="text-xs text-red-600 font-bold hover:underline"
+                                onClick={() => {
+                                  deleteImage(variant.image_url);
+                                  const newVariants = [...formData.variants];
+                                  newVariants[index].image_url = null;
+                                  setFormData(prev => ({...prev, variants: newVariants}));
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="flex items-center gap-2 border border-gray-300 rounded-md py-1.5 px-3 cursor-pointer hover:bg-gray-100">
+                              <Upload className="w-4 h-4 text-gray-400" />
+                              <span className="text-xs text-gray-500">Upload</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const url = await uploadImage(file);
+                                  if (url) {
+                                    const newVariants = [...formData.variants];
+                                    newVariants[index].image_url = url;
+                                    setFormData(prev => ({ ...prev, variants: newVariants }));
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
-                  {formData.variants.length === 0 && (
-                    <div className="text-sm text-gray-500 text-center py-4">No variants added. Click "Add Variant" above.</div>
-                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-6 border-t border-gray-200 pt-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Price (DA)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Original Price (DA)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.original_price}
-                    onChange={(e) => setFormData({ ...formData, original_price: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Stock</label>
-                  {formData.variants.length > 0 ? (
-                    <div className="mt-1 block w-full bg-indigo-50 border border-indigo-100 rounded-md py-2 px-3 text-indigo-700 font-bold">
-                      <div className="flex justify-between items-center">
-                        <span>{formData.stock}</span>
-                        <span className="text-[10px] bg-indigo-100 px-2 py-0.5 rounded-full uppercase">Computed</span>
-                      </div>
-                      <p className="text-[9px] mt-1 text-indigo-500 font-medium">إجمالي مخزون المتغيرات</p>
-                    </div>
-                  ) : (
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.stock}
-                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Category</label>
-                  <select
-                    value={formData.category_id}
-                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="">Select a category</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name_en} / {c.name_ar}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_featured"
-                    checked={formData.is_featured}
-                    onChange={(e) => setFormData({ ...formData, is_featured: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_featured" className="ml-2 block text-sm text-gray-900">
-                    Featured
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_new"
-                    checked={formData.is_new}
-                    onChange={(e) => setFormData({ ...formData, is_new: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_new" className="ml-2 block text-sm text-gray-900">
-                    New Product
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_sale"
-                    checked={formData.is_sale}
-                    onChange={(e) => setFormData({ ...formData, is_sale: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="is_sale" className="ml-2 block text-sm text-gray-900">
-                    On Sale
-                  </label>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  disabled={uploading}
-                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
-                  Save
+                  {editingProduct ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>
@@ -684,7 +546,7 @@ export default function Products() {
       <ConfirmModal
         isOpen={deleteModal.isOpen}
         title="حذف المنتج"
-        message="هل أنت متأكد أنك تريد حذف هذا المنتج؟ سيتم حذف جميع الصور المرتبطة به نهائياً ولن تتمكن من التراجع عن هذا الإجراء."
+        message="هل أنت متأكد أنك تريد حذف هذا المنتج؟ سيتم حذف صوره نهائياً."
         onConfirm={handleDelete}
         onCancel={() => setDeleteModal({ isOpen: false, id: null, images: [], isDeleting: false })}
         isDeleting={deleteModal.isDeleting}

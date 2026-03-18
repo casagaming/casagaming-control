@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { Package, ShoppingCart, DollarSign, Tags, Clock, Bell } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -18,30 +18,20 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [ordersRes, productsRes, categoriesRes, recentOrdersRes] = await Promise.all([
-          supabase.from('orders').select('total_price', { count: 'exact' }),
-          supabase.from('products').select('*', { count: 'exact', head: true }),
-          supabase.from('categories').select('*', { count: 'exact', head: true }),
-          supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(3)
-        ]);
-
-        const revenue = ordersRes.data?.reduce((sum, order) => sum + Number(order.total_price), 0) || 0;
-
+        const data = await db.stats.get();
         setStats({
-          totalOrders: ordersRes.count || 0,
-          totalRevenue: revenue,
-          totalProducts: productsRes.count || 0,
-          totalCategories: categoriesRes.count || 0,
+          totalOrders: data.totalOrders,
+          totalRevenue: data.totalRevenue,
+          totalProducts: data.totalProducts,
+          totalCategories: data.totalCategories,
         });
-        
-        setRecentOrders(recentOrdersRes.data || []);
+        setRecentOrders(data.recentOrders || []);
       } catch (error) {
         console.error('Error fetching stats:', error);
       } finally {
         setLoading(false);
       }
     }
-
     fetchStats();
   }, []);
 
@@ -67,7 +57,6 @@ export default function Dashboard() {
     onClick: () => navigate('/orders'),
   }));
 
-  // If there are no recent orders, show a placeholder
   if (highlightCards.length === 0) {
     highlightCards.push({
       icon: <Bell className="size-4 text-gray-300" />,

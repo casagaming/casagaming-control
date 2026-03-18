@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/db';
 import { ShippingRate } from '../types/supabase';
 import { Edit, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -23,12 +23,7 @@ export default function ShippingRates() {
 
   async function fetchRates() {
     try {
-      const { data, error } = await supabase
-        .from('shipping_rates')
-        .select('*')
-        .order('wilaya_id', { ascending: true });
-
-      if (error) throw error;
+      const data = await db.shippingRates.list();
       setRates(data || []);
     } catch (error: any) {
       toast.error(error.message);
@@ -57,20 +52,12 @@ export default function ShippingRates() {
     }
 
     try {
-      const rateData = {
+      await db.shippingRates.update(editingRate.id, {
         home_delivery_price: formData.home_delivery_price ? Number(formData.home_delivery_price) : null,
         desk_delivery_price: formData.desk_delivery_price ? Number(formData.desk_delivery_price) : null,
         return_price: formData.return_price ? Number(formData.return_price) : null,
-      };
-
-      const { error } = await supabase
-        .from('shipping_rates')
-        .update(rateData)
-        .eq('id', editingRate.id);
-
-      if (error) throw error;
+      });
       toast.success('Shipping rate updated successfully');
-      
       setIsModalOpen(false);
       fetchRates();
     } catch (error: any) {
@@ -189,13 +176,13 @@ export default function ShippingRates() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700"
                 >
                   Save
                 </button>
