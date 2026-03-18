@@ -9,6 +9,25 @@ import Pusher from 'pusher';
 import path from 'path';
 import { randomUUID } from 'crypto';
 
+const REQUIRED_ENV_VARS = [
+  'TURSO_DATABASE_URL',
+  'TURSO_AUTH_TOKEN',
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET',
+  'PUSHER_APP_ID',
+  'PUSHER_KEY',
+  'PUSHER_SECRET',
+  'PUSHER_CLUSTER',
+];
+
+const missing = REQUIRED_ENV_VARS.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error('❌ Missing required environment variables:\n' + missing.map(k => `   - ${k}`).join('\n'));
+  console.error('\nCopy .env.example to .env and fill in your values.');
+  process.exit(1);
+}
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
