@@ -6,21 +6,35 @@
 
 - **Frontend**: React 19 + TypeScript + Tailwind CSS v4 + Framer Motion
 - **Backend**: Express.js server (server.ts) - يعمل كـ API + Vite dev server
-- **Database**: Turso (libSQL) - متصل مباشرة من السيرفر
-- **Images**: Cloudinary
-- **Realtime Notifications**: Pusher
+- **Database**: Turso (libSQL) - متصل مباشرة من السيرفر عبر متغيرات البيئة
+- **Images**: Cloudinary - متصل عبر متغيرات البيئة
+- **Realtime Notifications**: Pusher - متصل عبر متغيرات البيئة
+
+## Environment Variables (Secrets)
+
+جميع المعلومات الحساسة محفوظة كـ secrets في Replit:
+
+- `TURSO_DATABASE_URL` - رابط قاعدة البيانات
+- `TURSO_AUTH_TOKEN` - مفتاح المصادقة لـ Turso
+- `CLOUDINARY_CLOUD_NAME` - اسم السحابة في Cloudinary
+- `CLOUDINARY_API_KEY` - مفتاح API لـ Cloudinary
+- `CLOUDINARY_API_SECRET` - الرمز السري لـ Cloudinary
+- `PUSHER_APP_ID` - معرف تطبيق Pusher
+- `PUSHER_KEY` - مفتاح Pusher
+- `PUSHER_SECRET` - الرمز السري لـ Pusher
+- `PUSHER_CLUSTER` - مجموعة Pusher (eu)
 
 ## Database (Turso)
 
 - URL: `libsql://casagaming1-casagaming.aws-eu-west-1.turso.io`
 - الجداول: categories, products, product_variants, orders, order_items, shipping_rates, store_config, banners
-- الاتصال مباشر من السيرفر بدون أي تدخل خارجي
 
 ## Notifications (Pusher)
 
-- App ID: 2129205 | Cluster: eu
+- Cluster: eu
 - Channel: `orders-channel` | Event: `new-order`
 - يُطلق الحدث تلقائياً عند إنشاء طلبية جديدة عبر `POST /api/orders`
+- صوت الإشعار: Cloudinary MP3
 
 ## API Endpoints
 
@@ -49,4 +63,4 @@ npm run dev  # runs on port 5000
 
 ## Production
 
-Works on any hosting platform - connection is hardcoded with env var fallback.
+المشروع جاهز للنشر على أي استضافة. جميع الإعدادات الحساسة محفوظة كمتغيرات بيئة.
