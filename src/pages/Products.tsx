@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../lib/db';
-import { Product, Category, ProductVariant } from '../types/supabase';
+import { Product, Category, ProductVariant } from '../types/database';
 import { Plus, Edit, Trash2, Search, Upload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { uploadImage, deleteImage } from '../lib/cloudinary';

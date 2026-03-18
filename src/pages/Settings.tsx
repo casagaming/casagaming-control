@@ -3,7 +3,7 @@ import { db } from '../lib/db';
 import toast from 'react-hot-toast';
 import { uploadImage, deleteImage } from '../lib/cloudinary';
 import { Upload, X, Loader2, Store, Phone, Mail, MapPin, Facebook, Instagram, MessageCircle } from 'lucide-react';
-import { StoreConfig } from '../types/supabase';
+import { StoreConfig } from '../types/database';
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);

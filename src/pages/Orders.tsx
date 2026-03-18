@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../lib/db';
-import { Order } from '../types/supabase';
+import { Order } from '../types/database';
 import { format } from 'date-fns';
 import { Eye, Search, Printer, CheckCircle2, XCircle, Clock, Truck, PackageCheck, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';

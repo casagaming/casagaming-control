@@ -14,15 +14,15 @@ cloudinary.config({
 });
 
 const db = createClient({
-  url: process.env.TURSO_URL || 'libsql://casagaming1-casagaming.aws-eu-west-1.turso.io',
-  authToken: process.env.TURSO_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM4MTY2MzUsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.uI1magG-U9X1NVygJU0-jRincNwJhsvcvl5gBJZj3FsKARpFLFH0ORe4Vcbmz7Udhn1nmh9ePxFBT1QAHm3mDg',
+  url: 'libsql://casagaming1-casagaming.aws-eu-west-1.turso.io',
+  authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM4MTY2MzUsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.uI1magG-U9X1NVygJU0-jRincNwJhsvcvl5gBJZj3FsKARpFLFH0ORe4Vcbmz7Udhn1nmh9ePxFBT1QAHm3mDg',
 });
 
 const pusher = new Pusher({
-  appId: process.env.PUSHER_APP_ID || '2129205',
-  key: process.env.PUSHER_KEY || '6f398ffd3b06e741d29f',
-  secret: process.env.PUSHER_SECRET || 'f4926e3de762bd1f28fe',
-  cluster: process.env.PUSHER_CLUSTER || 'eu',
+  appId: '2129205',
+  key: '6f398ffd3b06e741d29f',
+  secret: 'f4926e3de762bd1f28fe',
+  cluster: 'eu',
   useTLS: true,
 });
 

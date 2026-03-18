@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../lib/db';
-import { ShippingRate } from '../types/supabase';
+import { ShippingRate } from '../types/database';
 import { Edit, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 
