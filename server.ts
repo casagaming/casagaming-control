@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
@@ -70,6 +71,7 @@ async function deleteCloudinaryImages(urls: (string | null | undefined)[]): Prom
 
 async function startServer() {
   const app = express();
+  app.use(cors());
   app.use(express.json());
 
   // ─── Image Upload ─────────────────────────────────────────────────────
