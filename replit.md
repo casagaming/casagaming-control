@@ -55,6 +55,33 @@
 | POST | /api/upload | رفع صورة Cloudinary |
 | POST | /api/delete-image | حذف صورة Cloudinary |
 
+## store_config Schema (Correct Columns)
+
+| Column | Type |
+|--------|------|
+| store_name | TEXT |
+| logo_url | TEXT |
+| hero_images | TEXT |
+| contact_phone | TEXT |
+| contact_email | TEXT |
+| contact_address | TEXT |
+| facebook_url | TEXT |
+| instagram_url | TEXT |
+| twitter_url | TEXT |
+| whatsapp_number | TEXT |
+| updated_at | TIMESTAMP |
+
+## Stock Management
+
+- Stock is deducted automatically via `POST /api/orders` when a new order is placed
+- Stock is restored automatically in `Orders.tsx` when order status changes to "cancelled"
+- Stock is re-deducted if order status changes from "cancelled" back to active
+
+## Cloudinary Image Cleanup
+
+- Deleting a product, category, or banner also deletes the associated image(s) from Cloudinary via `/api/delete-image`
+- Helper: `deleteCloudinaryImage(url)` in `src/lib/cloudinary.ts`
+
 ## Running
 
 ```bash

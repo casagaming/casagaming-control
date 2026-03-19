@@ -5,6 +5,7 @@ import { Save } from "lucide-react";
 export default function Settings() {
   const [config, setConfig] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetchConfig();
@@ -24,40 +25,59 @@ export default function Settings() {
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      
-      // Check if config exists
+
       const res = await db.execute("SELECT COUNT(*) as count FROM store_config");
       const exists = Number(res.rows[0]?.count || 0) > 0;
-      
+
       if (exists) {
         await db.execute({
-          sql: "UPDATE store_config SET store_name = ?, logo_url = ?, phone = ?, email = ?, address = ?, facebook_url = ?, instagram_url = ?",
+          sql: `UPDATE store_config SET
+            store_name = ?,
+            logo_url = ?,
+            hero_images = ?,
+            contact_phone = ?,
+            contact_email = ?,
+            contact_address = ?,
+            facebook_url = ?,
+            instagram_url = ?,
+            twitter_url = ?,
+            whatsapp_number = ?,
+            updated_at = datetime('now')`,
           args: [
             config.store_name || "",
             config.logo_url || "",
-            config.phone || "",
-            config.email || "",
-            config.address || "",
+            config.hero_images || "",
+            config.contact_phone || "",
+            config.contact_email || "",
+            config.contact_address || "",
             config.facebook_url || "",
-            config.instagram_url || ""
-          ]
+            config.instagram_url || "",
+            config.twitter_url || "",
+            config.whatsapp_number || "",
+          ],
         });
       } else {
         await db.execute({
-          sql: "INSERT INTO store_config (store_name, logo_url, phone, email, address, facebook_url, instagram_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          sql: `INSERT INTO store_config
+            (store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
           args: [
             config.store_name || "",
             config.logo_url || "",
-            config.phone || "",
-            config.email || "",
-            config.address || "",
+            config.hero_images || "",
+            config.contact_phone || "",
+            config.contact_email || "",
+            config.contact_address || "",
             config.facebook_url || "",
-            config.instagram_url || ""
-          ]
+            config.instagram_url || "",
+            config.twitter_url || "",
+            config.whatsapp_number || "",
+          ],
         });
       }
-      
-      alert("تم حفظ الإعدادات بنجاح");
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error("Failed to save config:", error);
       alert("فشل حفظ الإعدادات");
@@ -66,94 +86,63 @@ export default function Settings() {
     }
   };
 
+  const field = (key: string, label: string, type = "text", placeholder = "", dir?: string, colSpan = 1) => (
+    <div className={`space-y-2 ${colSpan === 2 ? "md:col-span-2" : ""}`}>
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <input
+        type={type}
+        className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+        value={config[key] || ""}
+        onChange={e => setConfig({ ...config, [key]: e.target.value })}
+        placeholder={placeholder}
+        dir={dir}
+      />
+    </div>
+  );
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl" dir="rtl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">إعدادات المتجر</h1>
-        <button 
+        <button
           onClick={handleSave}
           disabled={isSaving}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl hover:opacity-90 transition-all font-medium disabled:opacity-50 text-white ${saved ? "bg-green-500" : "bg-indigo-600 hover:bg-indigo-700"}`}
         >
           <Save className="w-5 h-5" />
-          {isSaving ? "جاري الحفظ..." : "حفظ التغييرات"}
+          {isSaving ? "جاري الحفظ..." : saved ? "تم الحفظ ✓" : "حفظ التغييرات"}
         </button>
       </div>
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">اسم المتجر</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.store_name || ""}
-              onChange={e => setConfig({...config, store_name: e.target.value})}
-              placeholder="Kace Gaming"
-            />
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 space-y-8">
+        {/* Basic info */}
+        <div>
+          <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">معلومات المتجر</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {field("store_name", "اسم المتجر", "text", "Kace Gaming")}
+            {field("logo_url", "رابط الشعار", "text", "https://...", "ltr")}
+            {field("hero_images", "روابط صور الهيرو (مفصولة بفاصلة)", "text", "https://img1.jpg, https://img2.jpg", "ltr", 2)}
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">الشعار (رابط)</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.logo_url || ""}
-              onChange={e => setConfig({...config, logo_url: e.target.value})}
-              placeholder="https://..."
-            />
+        </div>
+
+        {/* Contact */}
+        <div>
+          <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">معلومات التواصل</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {field("contact_phone", "رقم الهاتف", "text", "0555555555", "ltr")}
+            {field("contact_email", "البريد الإلكتروني", "email", "contact@example.com", "ltr")}
+            {field("whatsapp_number", "رقم واتساب", "text", "213555555555", "ltr")}
+            {field("contact_address", "العنوان", "text", "الجزائر العاصمة...", undefined, 2)}
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">رقم الهاتف</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.phone || ""}
-              onChange={e => setConfig({...config, phone: e.target.value})}
-              placeholder="0555555555"
-              dir="ltr"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">البريد الإلكتروني</label>
-            <input
-              type="email"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.email || ""}
-              onChange={e => setConfig({...config, email: e.target.value})}
-              placeholder="contact@example.com"
-              dir="ltr"
-            />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-sm font-medium text-gray-700">العنوان</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.address || ""}
-              onChange={e => setConfig({...config, address: e.target.value})}
-              placeholder="الجزائر العاصمة..."
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">فيسبوك</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.facebook_url || ""}
-              onChange={e => setConfig({...config, facebook_url: e.target.value})}
-              placeholder="https://facebook.com/..."
-              dir="ltr"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">إنستغرام</label>
-            <input
-              type="text"
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              value={config.instagram_url || ""}
-              onChange={e => setConfig({...config, instagram_url: e.target.value})}
-              placeholder="https://instagram.com/..."
-              dir="ltr"
-            />
+        </div>
+
+        {/* Social */}
+        <div>
+          <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">روابط التواصل الاجتماعي</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {field("facebook_url", "فيسبوك", "text", "https://facebook.com/...", "ltr")}
+            {field("instagram_url", "إنستغرام", "text", "https://instagram.com/...", "ltr")}
+            {field("twitter_url", "تويتر / X", "text", "https://twitter.com/...", "ltr")}
           </div>
         </div>
       </div>

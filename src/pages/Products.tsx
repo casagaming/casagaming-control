@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X, Upload, Package, Image as ImageIcon } from "lucide-react";
-import { uploadImage } from "@/lib/cloudinary";
+import { uploadImage, deleteCloudinaryImage } from "@/lib/cloudinary";
 import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Products() {
@@ -568,6 +568,22 @@ export default function Products() {
           if (!deleteTargetId) return;
           try {
             setIsDeleting(true);
+            const target = products.find(p => p.id === deleteTargetId);
+            if (target) {
+              let imgs: string[] = [];
+              try { imgs = JSON.parse(target.images || target.image_url || "[]"); } catch {}
+              for (const url of imgs) {
+                await deleteCloudinaryImage(url);
+              }
+              const variants = await db.execute({
+                sql: "SELECT image_url FROM product_variants WHERE product_id = ? AND image_url != ''",
+                args: [deleteTargetId],
+              });
+              for (const v of variants.rows) {
+                if (v.image_url) await deleteCloudinaryImage(v.image_url as string);
+              }
+            }
+            await db.execute({ sql: "DELETE FROM product_variants WHERE product_id = ?", args: [deleteTargetId] });
             await db.execute({ sql: "DELETE FROM products WHERE id = ?", args: [deleteTargetId] });
             fetchProducts();
             setConfirmOpen(false);

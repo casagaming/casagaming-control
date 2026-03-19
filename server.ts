@@ -10,9 +10,9 @@ import multer from 'multer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Turso DB credentials
-const tursoUrl = process.env.TURSO_DATABASE_URL || 'https://casagaming1-casagaming.aws-eu-west-1.turso.io';
-const tursoToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM4NDMwNTUsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.EweA6uglQr4xeH5cXXbM6Jdlb9m8EMWzaRKMRbpQxOttCLaFI0Gn_2MurLDO-yo1e8eS_vavGGZcnn30oQqUDg';
+// Turso DB credentials — set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN as Replit secrets
+const tursoUrl = process.env.TURSO_DATABASE_URL || '';
+const tursoToken = process.env.TURSO_AUTH_TOKEN || '';
 const dbEnabled = Boolean(tursoUrl);
 const db = dbEnabled
   ? createClient({ url: tursoUrl, authToken: tursoToken })
@@ -119,14 +119,17 @@ async function initializeDB() {
     `);
     await db.execute(`
       CREATE TABLE IF NOT EXISTS store_config (
-        name TEXT,
-        logo TEXT,
-        phone TEXT,
-        email TEXT,
-        address TEXT,
-        facebook TEXT,
-        instagram TEXT,
-        whatsapp TEXT
+        store_name TEXT,
+        logo_url TEXT,
+        hero_images TEXT,
+        contact_phone TEXT,
+        contact_email TEXT,
+        contact_address TEXT,
+        facebook_url TEXT,
+        instagram_url TEXT,
+        twitter_url TEXT,
+        whatsapp_number TEXT,
+        updated_at TIMESTAMP
       )
     `);
     await db.execute(`
@@ -414,8 +417,8 @@ async function startServer() {
         total_price: total_price + shipping_price
       });
 
-      // Send OneSignal push notification to all admin subscribers
-      const oneSignalRestKey = process.env.ONESIGNAL_REST_API_KEY || 'os_v2_app_prpyiabmhrg5jl4uclebiuma5n2nuuflsi6uiu4mq44blwbqstt3co6dmtpfofidraodkcdr27xb7rs4zsrwhuovcmlmn3n7minuiby';
+      // Send OneSignal push notification to all admin subscribers — set ONESIGNAL_REST_API_KEY as a Replit secret
+      const oneSignalRestKey = process.env.ONESIGNAL_REST_API_KEY || '';
       fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
@@ -475,18 +478,18 @@ async function startServer() {
   });
 
   app.put('/api/store-config', async (req, res) => {
-    const { name, logo, phone, email, address, facebook, instagram, whatsapp } = req.body;
+    const { store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number } = req.body;
     try {
       const existing = await db.execute('SELECT COUNT(*) as count FROM store_config');
       if (Number(existing.rows[0].count) > 0) {
         await db.execute({
-          sql: 'UPDATE store_config SET name = ?, logo = ?, phone = ?, email = ?, address = ?, facebook = ?, instagram = ?, whatsapp = ?',
-          args: [name, logo, phone, email, address, facebook, instagram, whatsapp]
+          sql: `UPDATE store_config SET store_name = ?, logo_url = ?, hero_images = ?, contact_phone = ?, contact_email = ?, contact_address = ?, facebook_url = ?, instagram_url = ?, twitter_url = ?, whatsapp_number = ?, updated_at = datetime('now')`,
+          args: [store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number]
         });
       } else {
         await db.execute({
-          sql: 'INSERT INTO store_config (name, logo, phone, email, address, facebook, instagram, whatsapp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          args: [name, logo, phone, email, address, facebook, instagram, whatsapp]
+          sql: `INSERT INTO store_config (store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+          args: [store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number]
         });
       }
       res.json({ success: true });

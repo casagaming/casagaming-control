@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X, Upload } from "lucide-react";
-import { uploadImage } from "@/lib/cloudinary";
+import { uploadImage, deleteCloudinaryImage } from "@/lib/cloudinary";
 import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Categories() {
@@ -102,6 +102,10 @@ export default function Categories() {
     if (!deleteTargetId) return;
     try {
       setIsDeleting(true);
+      const target = categories.find(c => c.id === deleteTargetId);
+      if (target?.image_url) {
+        await deleteCloudinaryImage(target.image_url as string);
+      }
       await db.execute({ sql: "DELETE FROM categories WHERE id = ?", args: [deleteTargetId] });
       fetchCategories();
       setConfirmOpen(false);

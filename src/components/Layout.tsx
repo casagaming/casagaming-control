@@ -42,6 +42,8 @@ interface Toast {
   total: number;
 }
 
+const NOTIFICATION_SOUND = "https://res.cloudinary.com/ddsikz7wq/video/upload/v1773411583/%D9%86%D8%BA%D9%85%D9%87_%D8%B1%D8%B3%D8%A7%D8%A6%D9%84_%D8%A7%D9%8A%D9%81%D9%88%D9%86_%D8%A7%D9%84%D8%A7%D8%B5%D9%84%D9%8A%D9%87_%D8%A7%D9%84%D8%A7%D9%8A%D9%81%D9%88%D9%86_11%D8%A8%D8%B1%D9%88_2021_320_qa8kbe.mp3";
+
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,6 +55,32 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const toastCounter = useRef(0);
+  const audioUnlocked = useRef(false);
+  const notifAudio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(NOTIFICATION_SOUND);
+    audio.preload = "auto";
+    notifAudio.current = audio;
+
+    const unlock = () => {
+      if (audioUnlocked.current) return;
+      audio.volume = 0;
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 1;
+        audioUnlocked.current = true;
+      }).catch(() => {});
+    };
+
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+  }, []);
 
   useEffect(() => {
     setLocalNewCount(newCount);
@@ -81,9 +109,11 @@ export default function Layout() {
     }, 6000);
 
     try {
-      const audio = new Audio("https://res.cloudinary.com/ddsikz7wq/video/upload/v1773411583/%D9%86%D8%BA%D9%85%D9%87_%D8%B1%D8%B3%D8%A7%D8%A6%D9%84_%D8%A7%D9%8A%D9%81%D9%88%D9%86_%D8%A7%D9%84%D8%A7%D8%B5%D9%84%D9%8A%D9%87_%D8%A7%D9%84%D8%A7%D9%8A%D9%81%D9%88%D9%86_11%D8%A8%D8%B1%D9%88_2021_320_qa8kbe.mp3");
-      audio.volume = 1.0;
-      audio.play().catch(() => {});
+      if (notifAudio.current) {
+        notifAudio.current.currentTime = 0;
+        notifAudio.current.volume = 1.0;
+        notifAudio.current.play().catch(() => {});
+      }
     } catch {}
   }, []);
 
