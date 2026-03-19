@@ -1,102 +1,105 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Plus, Edit, Trash2, Image as ImageIcon } from 'lucide-react';
-import toast from 'react-hot-toast';
+import React, { useEffect, useState } from "react";
+import { db } from "@/lib/db";
+import { Plus, X, Upload } from "lucide-react";
+import { uploadImage } from "@/lib/cloudinary";
 
 export default function Categories() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState<any>(null);
-
-  const fetchCategories = async () => {
-    try {
-      const res = await axios.get('/api/categories');
-      setCategories(res.data);
-    } catch (error) {
-      toast.error('فشل في جلب التصنيفات');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [isUploading, setIsUploading] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [formData, setFormData] = useState({
+    name_ar: "",
+    name_en: "",
+    slug: "",
+    image_url: "",
+  });
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا التصنيف؟')) {
-      try {
-        await axios.delete(`/api/categories/${id}`);
-        toast.success('تم حذف التصنيف بنجاح');
-        fetchCategories();
-      } catch (error) {
-        toast.error('فشل في حذف التصنيف');
-      }
+  async function fetchCategories() {
+    try {
+      const res = await db.execute("SELECT * FROM categories ORDER BY id DESC");
+      setCategories(res.rows);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    try {
+      setIsUploading(true);
+      const url = await uploadImage(e.target.files[0]);
+      setFormData(prev => ({ ...prev, image_url: url }));
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert("فشل رفع الصورة");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const openModal = (category = null) => {
-    setCurrentCategory(category || { name_ar: '', name_en: '', slug: '', image_url: '' });
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({ name_ar: "", name_en: "", slug: "", image_url: "" });
     setIsModalOpen(true);
   };
 
-  const generateSlug = (name: string) => {
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-  };
-
-  const handleNameEnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name_en = e.target.value;
-    setCurrentCategory({
-      ...currentCategory,
-      name_en,
-      slug: currentCategory.id ? currentCategory.slug : generateSlug(name_en)
+  const openEditModal = (category: any) => {
+    setEditingId(category.id as number);
+    setFormData({
+      name_ar: category.name_ar as string || "",
+      name_en: category.name_en as string || "",
+      slug: category.slug as string || "",
+      image_url: category.image_url as string || "",
     });
+    setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (currentCategory.id) {
-        await axios.put(`/api/categories/${currentCategory.id}`, currentCategory);
-        toast.success('تم تحديث التصنيف بنجاح');
+      if (editingId) {
+        await db.execute({
+          sql: "UPDATE categories SET name_ar = ?, name_en = ?, slug = ?, image_url = ? WHERE id = ?",
+          args: [
+            formData.name_ar,
+            formData.name_en,
+            formData.slug,
+            formData.image_url,
+            editingId
+          ]
+        });
       } else {
-        await axios.post('/api/categories', currentCategory);
-        toast.success('تم إضافة التصنيف بنجاح');
+        await db.execute({
+          sql: "INSERT INTO categories (name_ar, name_en, slug, image_url) VALUES (?, ?, ?, ?)",
+          args: [
+            formData.name_ar,
+            formData.name_en,
+            formData.slug,
+            formData.image_url
+          ]
+        });
       }
       setIsModalOpen(false);
+      setFormData({ name_ar: "", name_en: "", slug: "", image_url: "" });
+      setEditingId(null);
       fetchCategories();
     } catch (error) {
-      toast.error('حدث خطأ أثناء حفظ التصنيف');
+      console.error("Failed to save category", error);
+      alert("فشل حفظ التصنيف");
     }
   };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-      const res = await axios.post('/api/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setCurrentCategory({ ...currentCategory, image_url: res.data.url });
-      toast.success('تم رفع الصورة بنجاح');
-    } catch (error) {
-      toast.error('فشل في رفع الصورة');
-    }
-  };
-
-  if (loading) return <div className="p-8 text-center">جاري التحميل...</div>;
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">إدارة التصنيفات</h1>
         <button 
-          onClick={() => openModal()}
+          onClick={openAddModal}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
         >
           <Plus className="w-5 h-5" />
@@ -104,102 +107,141 @@ export default function Categories() {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="p-4 font-medium text-gray-500">الصورة</th>
-                <th className="p-4 font-medium text-gray-500">الاسم (عربي)</th>
-                <th className="p-4 font-medium text-gray-500">الاسم (إنجليزي)</th>
-                <th className="p-4 font-medium text-gray-500">الرابط (Slug)</th>
-                <th className="p-4 font-medium text-gray-500">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((category: any) => (
-                <tr key={category.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="p-4">
-                    {category.image_url ? (
-                      <img src={category.image_url} alt={category.name_ar} className="w-12 h-12 rounded-lg object-cover border border-gray-200" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                        <ImageIcon className="w-6 h-6" />
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 font-medium text-gray-900">{category.name_ar}</td>
-                  <td className="p-4 text-gray-600">{category.name_en}</td>
-                  <td className="p-4 text-gray-500 font-mono text-sm">{category.slug}</td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => openModal(category)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => handleDelete(category.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">{currentCategory.id ? 'تعديل تصنيف' : 'إضافة تصنيف جديد'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">{editingId ? "تعديل تصنيف" : "إضافة تصنيف جديد"}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الاسم (عربي)</label>
-                <input required type="text" value={currentCategory.name_ar} onChange={e => setCurrentCategory({...currentCategory, name_ar: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">الاسم (عربي)</label>
+                <input 
+                  required
+                  value={formData.name_ar}
+                  onChange={e => setFormData({...formData, name_ar: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">الاسم (إنجليزي)</label>
+                <input 
+                  required
+                  value={formData.name_en}
+                  onChange={e => setFormData({...formData, name_en: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">الرابط (Slug)</label>
+                <input 
+                  required
+                  value={formData.slug}
+                  onChange={e => setFormData({...formData, slug: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  dir="ltr"
+                />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الاسم (إنجليزي)</label>
-                <input required type="text" value={currentCategory.name_en} onChange={handleNameEnChange} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الرابط (Slug)</label>
-                <input required type="text" value={currentCategory.slug} onChange={e => setCurrentCategory({...currentCategory, slug: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-mono text-left" dir="ltr" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">صورة التصنيف</label>
-                <div className="flex items-center gap-4">
-                  {currentCategory.image_url ? (
-                    <div className="relative w-20 h-20 rounded-xl border border-gray-200 overflow-hidden group">
-                      <img src={currentCategory.image_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      <button type="button" onClick={() => setCurrentCategory({...currentCategory, image_url: ''})} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="w-5 h-5" />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">الصورة</label>
+                <div className="flex gap-2">
+                  {formData.image_url && (
+                    <div className="relative group">
+                      <img src={formData.image_url} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                      <button 
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, image_url: "" }))}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
-                  ) : (
-                    <label className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors cursor-pointer bg-gray-50">
-                      <ImageIcon className="w-6 h-6 mb-1" />
-                      <span className="text-[10px] font-medium">رفع صورة</span>
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                    </label>
                   )}
+                  <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
+                    {isUploading ? <span className="text-xs">جاري...</span> : <Upload className="w-5 h-5" />}
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
+                  </label>
                 </div>
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 mt-6 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl text-gray-700 font-medium hover:bg-gray-100 transition-colors">إلغاء</button>
-                <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-sm">حفظ</button>
+              
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">
+                  إلغاء
+                </button>
+                <button type="submit" disabled={isUploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50">
+                  {editingId ? "حفظ التعديلات" : "حفظ التصنيف"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4">الصورة</th>
+                <th className="px-6 py-4">الاسم (عربي)</th>
+                <th className="px-6 py-4">الاسم (إنجليزي)</th>
+                <th className="px-6 py-4">الرابط (Slug)</th>
+                <th className="px-6 py-4">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {categories.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    لا توجد تصنيفات
+                  </td>
+                </tr>
+              ) : (
+                categories.map((category) => (
+                  <tr key={category.id as number} className="hover:bg-gray-50/50">
+                    <td className="px-6 py-4">
+                      {category.image_url ? (
+                        <img src={category.image_url as string} alt={category.name_ar as string} className="w-12 h-12 rounded-lg object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                          صورة
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 font-medium">{category.name_ar}</td>
+                    <td className="px-6 py-4">{category.name_en}</td>
+                    <td className="px-6 py-4">{category.slug}</td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => openEditModal(category)}
+                        className="text-indigo-600 hover:text-indigo-900 font-medium ml-3"
+                      >
+                        تعديل
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          if (confirm("هل أنت متأكد من حذف هذا التصنيف؟")) {
+                            await db.execute({ sql: "DELETE FROM categories WHERE id = ?", args: [category.id] });
+                            fetchCategories();
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-900 font-medium"
+                      >
+                        حذف
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

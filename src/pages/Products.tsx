@@ -1,390 +1,547 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Plus, Edit, Trash2, Image as ImageIcon } from 'lucide-react';
-import toast from 'react-hot-toast';
+import React, { useEffect, useState } from "react";
+import { db } from "@/lib/db";
+import { Plus, X, Upload } from "lucide-react";
+import { uploadImage } from "@/lib/cloudinary";
 
 export default function Products() {
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentProduct, setCurrentProduct] = useState<any>(null);
-
-  const fetchProducts = async () => {
-    try {
-      const res = await axios.get('/api/products');
-      setProducts(res.data);
-    } catch (error) {
-      toast.error('فشل في جلب المنتجات');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const res = await axios.get('/api/categories');
-      setCategories(res.data);
-    } catch (error) {
-      console.error('Failed to fetch categories', error);
-    }
-  };
+  const [isUploading, setIsUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [variants, setVariants] = useState<any[]>([]);
+  const [formData, setFormData] = useState({
+    name_ar: "",
+    name_en: "",
+    description_ar: "",
+    description_en: "",
+    price: 0,
+    original_price: 0,
+    stock: 0,
+    category_id: "",
+    is_featured: false,
+    is_new: true,
+    is_sale: false,
+    image_url: [] as string[],
+  });
 
   useEffect(() => {
     fetchProducts();
     fetchCategories();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
-      try {
-        await axios.delete(`/api/products/${id}`);
-        toast.success('تم حذف المنتج بنجاح');
-        fetchProducts();
-      } catch (error) {
-        toast.error('فشل في حذف المنتج');
-      }
+  async function fetchCategories() {
+    try {
+      const res = await db.execute("SELECT id, name_ar FROM categories");
+      setCategories(res.rows);
+    } catch (error) {
+      console.error("Failed to fetch categories:", error);
+    }
+  }
+
+  async function fetchProducts() {
+    try {
+      const res = await db.execute("SELECT * FROM products ORDER BY id DESC");
+      setProducts(res.rows);
+    } catch (error) {
+      console.error("Failed to fetch products:", error);
+    }
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    try {
+      setIsUploading(true);
+      const url = await uploadImage(e.target.files[0]);
+      setFormData(prev => ({ ...prev, image_url: [...prev.image_url, url] }));
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert("فشل رفع الصورة");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const openModal = (product = null) => {
-    setCurrentProduct(product || {
-      name_ar: '', name_en: '', description_ar: '', description_en: '',
-      price: 0, original_price: 0, image_url: [], category_id: '',
-      stock: 0, is_featured: false, is_new: false, is_sale: false,
-      variants: []
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({ 
+      name_ar: "", 
+      name_en: "", 
+      description_ar: "",
+      description_en: "",
+      price: 0, 
+      original_price: 0,
+      stock: 0, 
+      category_id: "",
+      is_featured: false,
+      is_new: true,
+      is_sale: false,
+      image_url: [] 
     });
+    setVariants([]);
     setIsModalOpen(true);
+  };
+
+  const openEditModal = async (product: any) => {
+    setEditingId(product.id as string);
+    let images = [];
+    try {
+      images = JSON.parse(product.image_url as string || "[]");
+    } catch (e) {}
+    
+    setFormData({
+      name_ar: product.name_ar as string || "",
+      name_en: product.name_en as string || "",
+      description_ar: product.description_ar as string || "",
+      description_en: product.description_en as string || "",
+      price: product.price as number || 0,
+      original_price: product.original_price as number || 0,
+      stock: product.stock as number || 0,
+      category_id: product.category_id as string || "",
+      is_featured: Boolean(product.is_featured),
+      is_new: Boolean(product.is_new),
+      is_sale: Boolean(product.is_sale),
+      image_url: images,
+    });
+
+    try {
+      const res = await db.execute({
+        sql: "SELECT * FROM product_variants WHERE product_id = ?",
+        args: [product.id]
+      });
+      setVariants(res.rows.map(v => ({
+        id: v.id,
+        name_ar: v.name_ar,
+        name_en: v.name_en,
+        stock: v.stock,
+        image_url: v.image_url
+      })));
+    } catch (error) {
+      console.error("Failed to fetch variants", error);
+      setVariants([]);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  const addVariant = () => {
+    setVariants([...variants, { id: Math.random().toString(), name_ar: "", name_en: "", stock: 0, image_url: "" }]);
+  };
+
+  const updateVariant = (index: number, field: string, value: any) => {
+    const newVariants = [...variants];
+    newVariants[index] = { ...newVariants[index], [field]: value };
+    setVariants(newVariants);
+  };
+
+  const removeVariant = (index: number) => {
+    const newVariants = [...variants];
+    newVariants.splice(index, 1);
+    setVariants(newVariants);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const productToSave = { ...currentProduct };
-      if (productToSave.variants && productToSave.variants.length > 0) {
-        productToSave.stock = productToSave.variants.reduce((sum: number, v: any) => sum + (Number(v.stock) || 0), 0);
+      let productId = editingId;
+      
+      if (editingId) {
+        await db.execute({
+          sql: "UPDATE products SET name_ar = ?, name_en = ?, description_ar = ?, description_en = ?, price = ?, original_price = ?, stock = ?, category_id = ?, is_featured = ?, is_new = ?, is_sale = ?, image_url = ?, images = ?, slug = ? WHERE id = ?",
+          args: [
+            formData.name_ar,
+            formData.name_en,
+            formData.description_ar,
+            formData.description_en,
+            formData.price,
+            formData.original_price,
+            formData.stock,
+            formData.category_id || null,
+            formData.is_featured ? 1 : 0,
+            formData.is_new ? 1 : 0,
+            formData.is_sale ? 1 : 0,
+            JSON.stringify(formData.image_url),
+            JSON.stringify(formData.image_url),
+            formData.name_en.toLowerCase().replace(/\s+/g, '-'),
+            editingId
+          ]
+        });
+        
+        // Delete existing variants
+        await db.execute({
+          sql: "DELETE FROM product_variants WHERE product_id = ?",
+          args: [editingId]
+        });
+      } else {
+        const res = await db.execute({
+          sql: "INSERT INTO products (name_ar, name_en, description_ar, description_en, price, original_price, stock, category_id, is_featured, is_new, is_sale, image_url, images, slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+          args: [
+            formData.name_ar,
+            formData.name_en,
+            formData.description_ar,
+            formData.description_en,
+            formData.price,
+            formData.original_price,
+            formData.stock,
+            formData.category_id || null,
+            formData.is_featured ? 1 : 0,
+            formData.is_new ? 1 : 0,
+            formData.is_sale ? 1 : 0,
+            JSON.stringify(formData.image_url),
+            JSON.stringify(formData.image_url),
+            formData.name_en.toLowerCase().replace(/\s+/g, '-')
+          ]
+        });
+        productId = res.rows[0].id as string;
       }
 
-      if (currentProduct.id) {
-        await axios.put(`/api/products/${currentProduct.id}`, productToSave);
-        toast.success('تم تحديث المنتج بنجاح');
-      } else {
-        await axios.post('/api/products', productToSave);
-        toast.success('تم إضافة المنتج بنجاح');
+      // Insert variants
+      for (const variant of variants) {
+        if (variant.name_ar && variant.name_en) {
+          await db.execute({
+            sql: "INSERT INTO product_variants (product_id, name_ar, name_en, stock, image_url) VALUES (?, ?, ?, ?, ?)",
+            args: [
+              productId,
+              variant.name_ar,
+              variant.name_en,
+              variant.stock,
+              variant.image_url || ""
+            ]
+          });
+        }
       }
+
       setIsModalOpen(false);
+      setFormData({ 
+        name_ar: "", 
+        name_en: "", 
+        description_ar: "",
+        description_en: "",
+        price: 0, 
+        original_price: 0,
+        stock: 0, 
+        category_id: "",
+        is_featured: false,
+        is_new: true,
+        is_sale: false,
+        image_url: [] 
+      });
+      setVariants([]);
+      setEditingId(null);
       fetchProducts();
     } catch (error) {
-      toast.error('حدث خطأ أثناء حفظ المنتج');
+      console.error("Failed to save product", error);
+      alert("فشل حفظ المنتج");
     }
   };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-      const res = await axios.post('/api/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      const currentImages = currentProduct.images 
-        ? JSON.parse(currentProduct.images) 
-        : (typeof currentProduct.image_url === 'string' && currentProduct.image_url.startsWith('[')) 
-          ? JSON.parse(currentProduct.image_url) 
-          : currentProduct.image_url || [];
-          
-      const newImages = [...currentImages, res.data.url];
-      
-      setCurrentProduct({
-        ...currentProduct,
-        image_url: newImages,
-        images: JSON.stringify(newImages)
-      });
-      toast.success('تم رفع الصورة بنجاح');
-    } catch (error) {
-      toast.error('فشل في رفع الصورة');
-    }
-  };
-
-  const handleVariantImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-      const res = await axios.post('/api/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      const newVariants = [...(currentProduct.variants || [])];
-      newVariants[index].image_url = res.data.url;
-      setCurrentProduct({ ...currentProduct, variants: newVariants });
-      toast.success('تم رفع صورة المتغير بنجاح');
-    } catch (error) {
-      toast.error('فشل في رفع الصورة');
-    }
-  };
-
-  if (loading) return <div className="p-8 text-center">جاري التحميل...</div>;
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">إدارة المنتجات</h1>
         <button 
-          onClick={() => openModal()}
+          onClick={openAddModal}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
         >
           <Plus className="w-5 h-5" />
           إضافة منتج
         </button>
       </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="p-4 font-medium text-gray-500">الصورة</th>
-                <th className="p-4 font-medium text-gray-500">الاسم</th>
-                <th className="p-4 font-medium text-gray-500">السعر</th>
-                <th className="p-4 font-medium text-gray-500">المخزون</th>
-                <th className="p-4 font-medium text-gray-500">الحالة</th>
-                <th className="p-4 font-medium text-gray-500">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product: any) => {
-                const images = product.images ? JSON.parse(product.images) : (typeof product.image_url === 'string' && product.image_url.startsWith('[')) ? JSON.parse(product.image_url) : [product.image_url].filter(Boolean);
-                return (
-                  <tr key={product.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="p-4">
-                      {images && images.length > 0 ? (
-                        <img src={images[0]} alt={product.name_ar} className="w-12 h-12 rounded-lg object-cover border border-gray-200" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                          <ImageIcon className="w-6 h-6" />
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4 font-medium text-gray-900">{product.name_ar}</td>
-                    <td className="p-4 font-bold text-indigo-600">{product.price} د.ج</td>
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-bold ${product.stock > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {product.stock > 0 ? `${product.stock} متوفر` : 'نفذ الكمية'}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex gap-1">
-                        {product.is_featured === 1 && <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md text-xs font-bold">مميّز</span>}
-                        {product.is_new === 1 && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold">جديد</span>}
-                        {product.is_sale === 1 && <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-xs font-bold">تخفيض</span>}
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Edit className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => handleDelete(product.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+      
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">{currentProduct.id ? 'تعديل منتج' : 'إضافة منتج جديد'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">{editingId ? "تعديل منتج" : "إضافة منتج جديد"}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الاسم (عربي)</label>
-                  <input required type="text" value={currentProduct.name_ar} onChange={e => setCurrentProduct({...currentProduct, name_ar: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">الاسم (عربي)</label>
+                  <input 
+                    required
+                    value={formData.name_ar}
+                    onChange={e => setFormData({...formData, name_ar: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الاسم (إنجليزي)</label>
-                  <input required type="text" value={currentProduct.name_en} onChange={e => setCurrentProduct({...currentProduct, name_en: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">الاسم (إنجليزي)</label>
+                  <input 
+                    required
+                    value={formData.name_en}
+                    onChange={e => setFormData({...formData, name_en: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
                 </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الوصف (عربي)</label>
-                  <textarea rows={3} value={currentProduct.description_ar} onChange={e => setCurrentProduct({...currentProduct, description_ar: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+                <div className="space-y-2 col-span-2">
+                  <label className="text-sm font-medium text-gray-700">الوصف (عربي)</label>
+                  <textarea 
+                    value={formData.description_ar}
+                    onChange={e => setFormData({...formData, description_ar: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none" 
+                  />
                 </div>
-                
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">الوصف (إنجليزي)</label>
-                  <textarea rows={3} value={currentProduct.description_en} onChange={e => setCurrentProduct({...currentProduct, description_en: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+                <div className="space-y-2 col-span-2">
+                  <label className="text-sm font-medium text-gray-700">الوصف (إنجليزي)</label>
+                  <textarea 
+                    value={formData.description_en}
+                    onChange={e => setFormData({...formData, description_en: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none" 
+                  />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">السعر الحالي</label>
-                  <input required type="number" value={currentProduct.price} onChange={e => setCurrentProduct({...currentProduct, price: Number(e.target.value)})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">السعر (د.ج)</label>
+                  <input 
+                    type="number" required
+                    value={formData.price}
+                    onChange={e => setFormData({...formData, price: Number(e.target.value)})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">السعر الأصلي (قبل التخفيض)</label>
-                  <input type="number" value={currentProduct.original_price} onChange={e => setCurrentProduct({...currentProduct, original_price: Number(e.target.value)})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">السعر الأصلي (د.ج)</label>
+                  <input 
+                    type="number"
+                    value={formData.original_price}
+                    onChange={e => setFormData({...formData, original_price: Number(e.target.value)})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">التصنيف</label>
-                  <select required value={currentProduct.category_id} onChange={e => setCurrentProduct({...currentProduct, category_id: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
-                    <option value="">اختر تصنيفاً</option>
-                    {categories.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.name_ar}</option>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">المخزون</label>
+                  <input 
+                    type="number" required
+                    value={formData.stock}
+                    onChange={e => setFormData({...formData, stock: Number(e.target.value)})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">التصنيف</label>
+                  <select
+                    value={formData.category_id}
+                    onChange={e => setFormData({...formData, category_id: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  >
+                    <option value="">بدون تصنيف</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name_ar}</option>
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">المخزون الإجمالي</label>
-                  <input 
-                    required 
-                    type="number" 
-                    value={currentProduct.variants?.length > 0 
-                      ? currentProduct.variants.reduce((sum: number, v: any) => sum + (Number(v.stock) || 0), 0) 
-                      : currentProduct.stock} 
-                    onChange={e => setCurrentProduct({...currentProduct, stock: Number(e.target.value)})} 
-                    disabled={currentProduct.variants?.length > 0}
-                    className={`w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all ${currentProduct.variants?.length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
-                  />
-                  {currentProduct.variants?.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-1">يتم حساب المخزون تلقائياً من مجموع المتغيرات</p>
-                  )}
-                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">صور المنتج</label>
-                <div className="flex gap-4 flex-wrap mb-4">
-                  {(currentProduct.images ? JSON.parse(currentProduct.images) : (typeof currentProduct.image_url === 'string' && currentProduct.image_url.startsWith('[')) ? JSON.parse(currentProduct.image_url) : currentProduct.image_url || []).map((url: string, i: number) => (
-                    <div key={i} className="relative w-24 h-24 rounded-xl border border-gray-200 overflow-hidden group">
-                      <img src={url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              <div className="flex gap-4 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={formData.is_featured}
+                    onChange={e => setFormData({...formData, is_featured: e.target.checked})}
+                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">مميز</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={formData.is_new}
+                    onChange={e => setFormData({...formData, is_new: e.target.checked})}
+                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">جديد</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={formData.is_sale}
+                    onChange={e => setFormData({...formData, is_sale: e.target.checked})}
+                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">تخفيض</span>
+                </label>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">الصور</label>
+                <div className="flex flex-wrap gap-2">
+                  {formData.image_url.map((url, i) => (
+                    <div key={i} className="relative group">
+                      <img src={url} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
                       <button 
                         type="button"
-                        onClick={() => {
-                          const newImages = [...(currentProduct.images ? JSON.parse(currentProduct.images) : (typeof currentProduct.image_url === 'string' && currentProduct.image_url.startsWith('[')) ? JSON.parse(currentProduct.image_url) : currentProduct.image_url || [])];
-                          newImages.splice(i, 1);
-                          setCurrentProduct({...currentProduct, image_url: newImages, images: JSON.stringify(newImages)});
-                        }}
-                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setFormData(prev => ({ ...prev, image_url: prev.image_url.filter((_, index) => index !== i) }))}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <Trash2 className="w-6 h-6" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
-                  <label className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors cursor-pointer bg-gray-50">
-                    <ImageIcon className="w-6 h-6 mb-1" />
-                    <span className="text-xs font-medium">إضافة صورة</span>
-                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors">
+                    {isUploading ? <span className="text-xs">جاري...</span> : <Upload className="w-5 h-5" />}
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
                   </label>
                 </div>
               </div>
 
-              <div className="flex gap-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={currentProduct.is_featured} onChange={e => setCurrentProduct({...currentProduct, is_featured: e.target.checked})} className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
-                  <span className="text-sm font-medium text-gray-700">منتج مميّز</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={currentProduct.is_new} onChange={e => setCurrentProduct({...currentProduct, is_new: e.target.checked})} className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
-                  <span className="text-sm font-medium text-gray-700">منتج جديد</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={currentProduct.is_sale} onChange={e => setCurrentProduct({...currentProduct, is_sale: e.target.checked})} className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
-                  <span className="text-sm font-medium text-gray-700">منتج في تخفيض</span>
-                </label>
-              </div>
-
-              <div className="border-t border-gray-100 pt-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">المتغيرات (الألوان، المقاسات...)</h3>
+              {/* Variants Section */}
+              <div className="pt-4 border-t border-gray-100 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-900">الأنواع (Variants)</h3>
                   <button 
                     type="button"
-                    onClick={() => setCurrentProduct({...currentProduct, variants: [...(currentProduct.variants || []), { name_ar: '', name_en: '', stock: 0, image_url: '' }]})}
-                    className="text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium"
+                    onClick={addVariant}
+                    className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-200 transition-colors font-medium"
                   >
-                    + إضافة متغير
+                    <Plus className="w-3 h-3" />
+                    إضافة نوع
                   </button>
                 </div>
-                <div className="space-y-4">
-                  {(currentProduct.variants || []).map((variant: any, index: number) => (
-                    <div key={index} className="flex gap-4 items-start p-4 bg-gray-50 rounded-xl border border-gray-200">
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">الاسم (عربي)</label>
-                          <input required type="text" value={variant.name_ar} onChange={e => {
-                            const newVariants = [...currentProduct.variants];
-                            newVariants[index].name_ar = e.target.value;
-                            setCurrentProduct({...currentProduct, variants: newVariants});
-                          }} className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="مثال: أحمر كبير" />
+                
+                {variants.length > 0 && (
+                  <div className="space-y-3">
+                    {variants.map((variant, index) => (
+                      <div key={variant.id} className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded-xl border border-gray-100">
+                        <div className="col-span-4">
+                          <input 
+                            placeholder="الاسم (عربي)"
+                            value={variant.name_ar}
+                            onChange={e => updateVariant(index, 'name_ar', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+                          />
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">الاسم (إنجليزي)</label>
-                          <input required type="text" value={variant.name_en} onChange={e => {
-                            const newVariants = [...currentProduct.variants];
-                            newVariants[index].name_en = e.target.value;
-                            setCurrentProduct({...currentProduct, variants: newVariants});
-                          }} className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="e.g. Red Large" />
+                        <div className="col-span-4">
+                          <input 
+                            placeholder="الاسم (إنجليزي)"
+                            value={variant.name_en}
+                            onChange={e => updateVariant(index, 'name_en', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+                          />
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">المخزون</label>
-                          <input required type="number" value={variant.stock} onChange={e => {
-                            const newVariants = [...currentProduct.variants];
-                            newVariants[index].stock = Number(e.target.value);
-                            setCurrentProduct({...currentProduct, variants: newVariants});
-                          }} className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <div className="col-span-3">
+                          <input 
+                            type="number"
+                            placeholder="المخزون"
+                            value={variant.stock}
+                            onChange={e => updateVariant(index, 'stock', Number(e.target.value))}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          <button 
+                            type="button"
+                            onClick={() => removeVariant(index)}
+                            className="text-red-500 hover:text-red-700 p-1"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors cursor-pointer bg-white overflow-hidden relative">
-                          {variant.image_url ? (
-                            <img src={variant.image_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <ImageIcon className="w-5 h-5" />
-                          )}
-                          <input type="file" className="hidden" accept="image/*" onChange={(e) => handleVariantImageUpload(e, index)} />
-                        </label>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const newVariants = [...currentProduct.variants];
-                            newVariants.splice(index, 1);
-                            setCurrentProduct({...currentProduct, variants: newVariants});
-                          }}
-                          className="text-red-600 p-1 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl text-gray-700 font-medium hover:bg-gray-100 transition-colors">إلغاء</button>
-                <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-sm">حفظ المنتج</button>
+              
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">
+                  إلغاء
+                </button>
+                <button type="submit" disabled={isUploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50">
+                  {editingId ? "حفظ التعديلات" : "حفظ المنتج"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4">الصورة</th>
+                <th className="px-6 py-4">الاسم</th>
+                <th className="px-6 py-4">التصنيف</th>
+                <th className="px-6 py-4">السعر</th>
+                <th className="px-6 py-4">المخزون</th>
+                <th className="px-6 py-4">الحالة</th>
+                <th className="px-6 py-4">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                    لا توجد منتجات
+                  </td>
+                </tr>
+              ) : (
+                products.map((product) => {
+                  let images = [];
+                  try {
+                    images = JSON.parse(product.image_url as string || "[]");
+                  } catch (e) {}
+                  
+                  const category = categories.find(c => c.id === product.category_id);
+                  
+                  return (
+                    <tr key={product.id as number} className="hover:bg-gray-50/50">
+                      <td className="px-6 py-4">
+                        {images[0] ? (
+                          <img src={images[0]} alt={product.name_ar as string} className="w-12 h-12 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                            صورة
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 font-medium">{product.name_ar}</td>
+                      <td className="px-6 py-4 text-gray-500">{category ? category.name_ar : '-'}</td>
+                      <td className="px-6 py-4">{product.price} د.ج</td>
+                      <td className="px-6 py-4">{product.stock}</td>
+                      <td className="px-6 py-4">
+                        {product.is_sale ? (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
+                            تخفيض
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                            عادي
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <button 
+                          onClick={() => openEditModal(product)}
+                          className="text-indigo-600 hover:text-indigo-900 font-medium ml-3"
+                        >
+                          تعديل
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (confirm("هل أنت متأكد من حذف هذا المنتج؟")) {
+                              await db.execute({ sql: "DELETE FROM products WHERE id = ?", args: [product.id] });
+                              fetchProducts();
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-900 font-medium"
+                        >
+                          حذف
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
