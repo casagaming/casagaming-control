@@ -7,22 +7,23 @@ import Pusher from 'pusher';
 import { randomUUID } from 'crypto';
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'ddsikz7wq',
+  api_key: process.env.CLOUDINARY_API_KEY || '728859884445323',
+  api_secret: process.env.CLOUDINARY_API_SECRET || 'qJBcAxrhV_loi85MYP8OK_F_IcY',
 });
 
 // Force HTTPS (not WebSocket) so it works in serverless environments like Vercel
-const tursoUrl = (process.env.TURSO_DATABASE_URL || '').replace(/^libsql:\/\//, 'https://');
+const rawTursoUrl = process.env.TURSO_DATABASE_URL || 'libsql://casagaming1-casagaming.aws-eu-west-1.turso.io';
+const tursoUrl = rawTursoUrl.replace(/^libsql:\/\//, 'https://');
 const db = createClient({
   url: tursoUrl,
-  authToken: process.env.TURSO_AUTH_TOKEN,
+  authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM5MzU2NTYsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.eUkNa1hvgzFzYwPjFDNV3TQWhBAzGUgNSGFcMMenil6bJhmQciT8gE3l4OUipmJ-x9TOmJjMUDa6sZKpafRNBg',
 });
 
 const pusher = new Pusher({
-  appId: process.env.PUSHER_APP_ID!,
-  key: process.env.PUSHER_KEY!,
-  secret: process.env.PUSHER_SECRET!,
+  appId: process.env.PUSHER_APP_ID || '2129205',
+  key: process.env.PUSHER_KEY || '6f398ffd3b06e741d29f',
+  secret: process.env.PUSHER_SECRET || 'f4926e3de762bd1f28fe',
   cluster: process.env.PUSHER_CLUSTER || 'eu',
   useTLS: true,
 });
