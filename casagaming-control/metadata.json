@@ -1,0 +1,5 @@
+{
+  "name": "control",
+  "description": "Admin dashboard for managing products, categories, orders, and shipping rates.",
+  "requestFramePermissions": []
+}
