@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X, Upload, Image } from "lucide-react";
 import { uploadImage } from "@/lib/cloudinary";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Banners() {
   const [banners, setBanners] = useState<any[]>([]);
@@ -9,6 +10,9 @@ export default function Banners() {
   const [isUploading, setIsUploading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [imageUrl, setImageUrl] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchBanners();
@@ -173,12 +177,7 @@ export default function Banners() {
                     تعديل
                   </button>
                   <button
-                    onClick={async () => {
-                      if (confirm("هل أنت متأكد من حذف هذا البانر؟")) {
-                        await db.execute({ sql: "DELETE FROM banners WHERE id = ?", args: [banner.id] });
-                        fetchBanners();
-                      }
-                    }}
+                    onClick={() => { setDeleteTargetId(banner.id as number); setConfirmOpen(true); }}
                     className="text-xs text-red-600 hover:text-red-900 font-medium"
                   >
                     حذف
@@ -189,6 +188,28 @@ export default function Banners() {
           ))
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="حذف البانر"
+        message="هل أنت متأكد من حذف هذا البانر؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={async () => {
+          if (!deleteTargetId) return;
+          try {
+            setIsDeleting(true);
+            await db.execute({ sql: "DELETE FROM banners WHERE id = ?", args: [deleteTargetId] });
+            fetchBanners();
+            setConfirmOpen(false);
+          } catch {
+            alert("فشل حذف البانر");
+          } finally {
+            setIsDeleting(false);
+            setDeleteTargetId(null);
+          }
+        }}
+        onCancel={() => { setConfirmOpen(false); setDeleteTargetId(null); }}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

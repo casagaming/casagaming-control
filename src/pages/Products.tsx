@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X, Upload, Package, Image as ImageIcon } from "lucide-react";
 import { uploadImage } from "@/lib/cloudinary";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Products() {
   const [products, setProducts] = useState<any[]>([]);
@@ -10,6 +11,9 @@ export default function Products() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [variants, setVariants] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name_ar: "",
@@ -541,12 +545,7 @@ export default function Products() {
                           تعديل
                         </button>
                         <button
-                          onClick={async () => {
-                            if (confirm("هل أنت متأكد من حذف هذا المنتج؟")) {
-                              await db.execute({ sql: "DELETE FROM products WHERE id = ?", args: [product.id] });
-                              fetchProducts();
-                            }
-                          }}
+                          onClick={() => { setDeleteTargetId(product.id as string); setConfirmOpen(true); }}
                           className="text-red-600 hover:text-red-900 font-medium"
                         >
                           حذف
@@ -560,6 +559,28 @@ export default function Products() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="حذف المنتج"
+        message="هل أنت متأكد من حذف هذا المنتج؟ سيتم حذف جميع بياناته ولا يمكن التراجع."
+        onConfirm={async () => {
+          if (!deleteTargetId) return;
+          try {
+            setIsDeleting(true);
+            await db.execute({ sql: "DELETE FROM products WHERE id = ?", args: [deleteTargetId] });
+            fetchProducts();
+            setConfirmOpen(false);
+          } catch {
+            alert("فشل حذف المنتج");
+          } finally {
+            setIsDeleting(false);
+            setDeleteTargetId(null);
+          }
+        }}
+        onCancel={() => { setConfirmOpen(false); setDeleteTargetId(null); }}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

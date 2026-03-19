@@ -10,9 +10,9 @@ import multer from 'multer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Turso DB - credentials loaded from environment secrets (falls back to empty for graceful startup)
-const tursoUrl = process.env.TURSO_DATABASE_URL || '';
-const tursoToken = process.env.TURSO_AUTH_TOKEN || '';
+// Turso DB credentials
+const tursoUrl = process.env.TURSO_DATABASE_URL || 'https://casagaming1-casagaming.aws-eu-west-1.turso.io';
+const tursoToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM4NDMwNTUsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.EweA6uglQr4xeH5cXXbM6Jdlb9m8EMWzaRKMRbpQxOttCLaFI0Gn_2MurLDO-yo1e8eS_vavGGZcnn30oQqUDg';
 const dbEnabled = Boolean(tursoUrl);
 const db = dbEnabled
   ? createClient({ url: tursoUrl, authToken: tursoToken })
@@ -407,12 +407,33 @@ async function startServer() {
         });
       }
 
-      // Trigger Pusher notification
+      // Trigger Pusher real-time event
       pusher.trigger('orders-channel', 'new-order', {
         id: orderId,
         customer_name,
         total_price: total_price + shipping_price
       });
+
+      // Send OneSignal push notification to all admin subscribers
+      const oneSignalRestKey = process.env.ONESIGNAL_REST_API_KEY || 'os_v2_app_prpyiabmhrg5jl4uclebiuma5n2nuuflsi6uiu4mq44blwbqstt3co6dmtpfofidraodkcdr27xb7rs4zsrwhuovcmlmn3n7minuiby';
+      fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${oneSignalRestKey}`,
+        },
+        body: JSON.stringify({
+          app_id: '7c5f8400-2c3c-4dd4-af94-12c8145180eb',
+          included_segments: ['All'],
+          headings: { ar: '🛒 طلب جديد - Kace Gaming', en: '🛒 New Order - Kace Gaming' },
+          contents: {
+            ar: `طلب جديد من ${customer_name} — ${(total_price + shipping_price).toLocaleString()} د.ج`,
+            en: `New order from ${customer_name} — ${(total_price + shipping_price).toLocaleString()} DZD`,
+          },
+          data: { order_id: orderId },
+          url: '/',
+        }),
+      }).catch(err => console.error('OneSignal notification failed:', err));
       
       res.json({ id: orderId });
     } catch (error) {

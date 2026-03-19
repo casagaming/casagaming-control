@@ -1,26 +1,62 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { db } from "@/lib/db";
-import { ShoppingCart, DollarSign, Package, Tags, Bell } from "lucide-react";
+import {
+  ShoppingCart,
+  DollarSign,
+  Package,
+  Tags,
+  Clock,
+  ArrowLeft,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
+
+const STATUS_BADGE: Record<string, { label: string; color: string }> = {
+  pending:    { label: "قيد الانتظار", color: "bg-amber-100 text-amber-700" },
+  processing: { label: "قيد التجهيز",  color: "bg-blue-100 text-blue-700" },
+  shipped:    { label: "تم الشحن",      color: "bg-purple-100 text-purple-700" },
+  delivered:  { label: "تم التوصيل",   color: "bg-green-100 text-green-700" },
+  cancelled:  { label: "ملغى",          color: "bg-red-100 text-red-700" },
+};
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
     totalProducts: 0,
     totalCategories: 0,
+    pendingOrders: 0,
+    processingOrders: 0,
+    todayOrders: 0,
+    lowStockProducts: 0,
   });
-
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [ordersRes, revenueRes, productsRes, categoriesRes, recentOrdersRes] = await Promise.all([
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString();
+
+        const [
+          ordersRes, revenueRes, productsRes, categoriesRes,
+          recentOrdersRes, pendingRes, processingRes, todayRes, lowStockRes
+        ] = await Promise.all([
           db.execute("SELECT COUNT(*) as count FROM orders"),
           db.execute("SELECT SUM(total_price) as total FROM orders WHERE status != 'ملغى'"),
           db.execute("SELECT COUNT(*) as count FROM products"),
           db.execute("SELECT COUNT(*) as count FROM categories"),
-          db.execute("SELECT id, customer_name, created_at, status FROM orders ORDER BY created_at DESC LIMIT 3"),
+          db.execute("SELECT id, customer_name, created_at, status, total_price, wilaya FROM orders ORDER BY created_at DESC LIMIT 6"),
+          db.execute("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'"),
+          db.execute("SELECT COUNT(*) as count FROM orders WHERE status = 'processing'"),
+          db.execute({ sql: "SELECT COUNT(*) as count FROM orders WHERE created_at >= ?", args: [todayStr] }),
+          db.execute("SELECT COUNT(*) as count FROM products WHERE stock <= 3 AND stock > 0"),
         ]);
 
         setStats({
@@ -28,138 +64,211 @@ export default function Dashboard() {
           totalRevenue: Number(revenueRes.rows[0]?.total || 0),
           totalProducts: Number(productsRes.rows[0]?.count || 0),
           totalCategories: Number(categoriesRes.rows[0]?.count || 0),
+          pendingOrders: Number(pendingRes.rows[0]?.count || 0),
+          processingOrders: Number(processingRes.rows[0]?.count || 0),
+          todayOrders: Number(todayRes.rows[0]?.count || 0),
+          lowStockProducts: Number(lowStockRes.rows[0]?.count || 0),
         });
 
         setRecentOrders(recentOrdersRes.rows as any[]);
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setLoading(false);
       }
     }
-
     fetchData();
   }, []);
 
+  const urgentCount = stats.pendingOrders + stats.processingOrders;
+
   return (
-    <div className="space-y-8 pb-12">
-      <div className="px-1">
-        <h1 className="text-2xl font-bold text-gray-900">لوحة التحكم</h1>
-        <p className="text-gray-500 mt-1">مرحباً بك في لوحة تحكم Kace Gaming</p>
+    <div className="space-y-6 pb-10" dir="rtl">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-black text-slate-900">لوحة التحكم</h1>
+        <p className="text-slate-400 mt-1 text-sm">مرحباً بك في لوحة تحكم Kace Gaming</p>
       </div>
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="p-3 rounded-xl text-white shadow-lg shadow-gray-200 bg-blue-600">
-              <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
+
+      {/* Urgent Alert */}
+      {urgentCount > 0 && (
+        <button
+          onClick={() => navigate('/orders')}
+          className="w-full flex items-center justify-between gap-4 bg-gradient-to-l from-red-500 to-rose-600 text-white rounded-2xl p-4 shadow-lg shadow-red-100 hover:shadow-xl transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5" />
             </div>
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                إجمالي الطلبات
+            <div className="text-right">
+              <p className="font-black text-base">
+                {urgentCount} طلب يحتاج انتباهك!
               </p>
-              <p className="text-lg sm:text-2xl font-black text-gray-900 truncate">
-                {stats.totalOrders}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="p-3 rounded-xl text-white shadow-lg shadow-gray-200 bg-emerald-600">
-              <DollarSign className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                إجمالي الأرباح
-              </p>
-              <p className="text-lg sm:text-2xl font-black text-gray-900 truncate">
-                {stats.totalRevenue} د.ج
+              <p className="text-red-100 text-xs mt-0.5">
+                {stats.pendingOrders > 0 && `${stats.pendingOrders} قيد الانتظار`}
+                {stats.pendingOrders > 0 && stats.processingOrders > 0 && ' · '}
+                {stats.processingOrders > 0 && `${stats.processingOrders} قيد التجهيز`}
               </p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="p-3 rounded-xl text-white shadow-lg shadow-gray-200 bg-purple-600">
-              <Package className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                إجمالي المنتجات
-              </p>
-              <p className="text-lg sm:text-2xl font-black text-gray-900 truncate">
-                {stats.totalProducts}
-              </p>
-            </div>
+          <div className="flex items-center gap-1 text-sm font-bold opacity-80 group-hover:opacity-100">
+            عرض الطلبات
+            <ArrowLeft className="w-4 h-4" />
           </div>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="p-3 rounded-xl text-white shadow-lg shadow-gray-200 bg-orange-600">
-              <Tags className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">
-                إجمالي الأصناف
-              </p>
-              <p className="text-lg sm:text-2xl font-black text-gray-900 truncate">
-                {stats.totalCategories}
-              </p>
-            </div>
-          </div>
-        </div>
+        </button>
+      )}
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="إجمالي الطلبات"
+          value={stats.totalOrders}
+          icon={ShoppingCart}
+          color="blue"
+          sub={stats.todayOrders > 0 ? `+${stats.todayOrders} اليوم` : undefined}
+          onClick={() => navigate('/orders')}
+          loading={loading}
+        />
+        <StatCard
+          label="إجمالي الإيرادات"
+          value={`${stats.totalRevenue.toLocaleString()} د.ج`}
+          icon={DollarSign}
+          color="green"
+          loading={loading}
+        />
+        <StatCard
+          label="المنتجات"
+          value={stats.totalProducts}
+          icon={Package}
+          color="purple"
+          sub={stats.lowStockProducts > 0 ? `${stats.lowStockProducts} مخزون منخفض` : undefined}
+          subColor={stats.lowStockProducts > 0 ? "text-amber-600" : undefined}
+          onClick={() => navigate('/products')}
+          loading={loading}
+        />
+        <StatCard
+          label="الأصناف"
+          value={stats.totalCategories}
+          icon={Tags}
+          color="orange"
+          onClick={() => navigate('/categories')}
+          loading={loading}
+        />
       </div>
-      <div className="mt-8 sm:mt-12">
-        <div className="flex items-center justify-between mb-6 px-1">
-          <h2 className="text-xl font-bold text-gray-900">آخر التنبيهات</h2>
-          <button className="text-sm text-indigo-600 hover:text-indigo-800 font-bold">
-            عرض الكل ←
+
+      {/* Quick Status Overview */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "قيد الانتظار",  count: stats.pendingOrders,    icon: Clock,         color: "bg-amber-50 text-amber-700 border-amber-100", dot: "bg-amber-400" },
+          { label: "قيد التجهيز",   count: stats.processingOrders, icon: Loader2,       color: "bg-blue-50 text-blue-700 border-blue-100",   dot: "bg-blue-400" },
+          { label: "تم التوصيل",    count: 0,                       icon: CheckCircle2,  color: "bg-green-50 text-green-700 border-green-100", dot: "bg-green-400" },
+          { label: "طلبات اليوم",   count: stats.todayOrders,       icon: TrendingUp,    color: "bg-indigo-50 text-indigo-700 border-indigo-100", dot: "bg-indigo-400" },
+        ].map(({ label, count, icon: Icon, color, dot }) => (
+          <button
+            key={label}
+            onClick={() => navigate('/orders')}
+            className={`flex items-center gap-3 rounded-2xl border p-3 transition-all hover:shadow-sm ${color}`}
+          >
+            <div className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+            <div className="text-right min-w-0">
+              <p className="text-xs opacity-70 truncate">{label}</p>
+              <p className="text-xl font-black">{loading ? '—' : count}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Recent Orders */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-900">آخر الطلبات</h2>
+          <button
+            onClick={() => navigate('/orders')}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+          >
+            عرض الكل
+            <ArrowLeft className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            {recentOrders.length > 0 ? (
-              recentOrders.map((order) => (
-                <div key={order.id} className="relative flex h-32 sm:h-36 flex-col justify-between rounded-2xl border bg-gray-50 px-4 py-4 cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/50 transition-all duration-300 shadow-sm hover:-translate-y-2">
-                  <div className="flex items-start justify-between">
-                    <span className="relative inline-block rounded-lg bg-white shadow-sm p-2 mb-2 border border-gray-100">
-                      <Bell className="size-4 text-indigo-500" />
-                    </span>
-                    <p className="text-[10px] font-bold text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-100">
-                      {new Date(order.created_at).toLocaleDateString('ar-DZ')}
-                    </p>
+        <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden shadow-sm">
+          {loading ? (
+            <div className="p-12 text-center text-slate-300">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
+            </div>
+          ) : recentOrders.length === 0 ? (
+            <div className="p-12 text-center text-slate-400">
+              <ShoppingCart className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">لا توجد طلبات حديثة</p>
+            </div>
+          ) : (
+            recentOrders.map((order) => {
+              const badge = STATUS_BADGE[order.status as string] || { label: order.status, color: "bg-slate-100 text-slate-600" };
+              return (
+                <div
+                  key={order.id as number}
+                  onClick={() => navigate('/orders')}
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
+                    {String(order.customer_name || "؟").charAt(0)}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-base sm:text-lg font-bold truncate text-gray-800">
-                      طلب جديد #{order.id}
-                    </p>
-                    <p className="truncate text-xs sm:text-sm text-gray-500 font-medium">
-                      من: {order.customer_name} - {order.status}
-                    </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-900 text-sm truncate">{order.customer_name}</p>
+                    <p className="text-xs text-slate-400 truncate">{order.wilaya || ''} · #{String(order.id).substring(0, 8)}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className="font-bold text-sm text-slate-900">{order.total_price} <span className="text-xs font-normal text-slate-400">د.ج</span></span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="relative flex h-32 sm:h-36 flex-col justify-between rounded-2xl border bg-gray-50 px-4 py-4 cursor-pointer hover:border-indigo-200 hover:bg-indigo-50/50 transition-all duration-300 shadow-sm hover:-translate-y-2">
-                <div className="flex items-start justify-between">
-                  <span className="relative inline-block rounded-lg bg-white shadow-sm p-2 mb-2 border border-gray-100">
-                    <Bell className="size-4 text-gray-300" />
-                  </span>
-                  <p className="text-[10px] font-bold text-gray-400 bg-white px-2 py-1 rounded-md border border-gray-100">
-                    الآن
-                  </p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-base sm:text-lg font-bold truncate text-gray-500">
-                    لا توجد طلبات حديثة
-                  </p>
-                  <p className="truncate text-xs sm:text-sm text-gray-600 font-medium">
-                    بانتظار وصول طلبات جديدة...
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function StatCard({
+  label, value, icon: Icon, color, sub, subColor, onClick, loading
+}: {
+  label: string;
+  value: string | number;
+  icon: any;
+  color: "blue" | "green" | "purple" | "orange";
+  sub?: string;
+  subColor?: string;
+  onClick?: () => void;
+  loading?: boolean;
+}) {
+  const colors = {
+    blue:   { bg: "bg-blue-600",   shadow: "shadow-blue-100",   ring: "hover:ring-blue-100" },
+    green:  { bg: "bg-emerald-600", shadow: "shadow-emerald-100", ring: "hover:ring-emerald-100" },
+    purple: { bg: "bg-violet-600", shadow: "shadow-violet-100", ring: "hover:ring-violet-100" },
+    orange: { bg: "bg-orange-500", shadow: "shadow-orange-100", ring: "hover:ring-orange-100" },
+  };
+  const c = colors[color];
+
+  return (
+    <button
+      onClick={onClick}
+      className={`bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 text-right hover:shadow-md ring-2 ring-transparent transition-all ${onClick ? 'cursor-pointer ' + c.ring : 'cursor-default'} w-full`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className={`p-2.5 rounded-xl ${c.bg} shadow-md ${c.shadow} shrink-0`}>
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+      </div>
+      <div className="mt-3">
+        <p className="text-xs text-slate-400 font-medium">{label}</p>
+        <p className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+          {loading ? <span className="opacity-20">—</span> : value}
+        </p>
+        {sub && (
+          <p className={`text-xs font-bold mt-1 ${subColor || 'text-emerald-600'}`}>{sub}</p>
+        )}
+      </div>
+    </button>
   );
 }

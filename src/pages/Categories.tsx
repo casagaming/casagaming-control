@@ -2,12 +2,16 @@ import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X, Upload } from "lucide-react";
 import { uploadImage } from "@/lib/cloudinary";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Categories() {
   const [categories, setCategories] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     name_ar: "",
     name_en: "",
@@ -91,6 +95,21 @@ export default function Categories() {
     } catch (error) {
       console.error("Failed to save category", error);
       alert("فشل حفظ التصنيف");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTargetId) return;
+    try {
+      setIsDeleting(true);
+      await db.execute({ sql: "DELETE FROM categories WHERE id = ?", args: [deleteTargetId] });
+      fetchCategories();
+      setConfirmOpen(false);
+    } catch {
+      alert("فشل حذف التصنيف");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTargetId(null);
     }
   };
 
@@ -224,12 +243,7 @@ export default function Categories() {
                         تعديل
                       </button>
                       <button 
-                        onClick={async () => {
-                          if (confirm("هل أنت متأكد من حذف هذا التصنيف؟")) {
-                            await db.execute({ sql: "DELETE FROM categories WHERE id = ?", args: [category.id] });
-                            fetchCategories();
-                          }
-                        }}
+                        onClick={() => { setDeleteTargetId(category.id as number); setConfirmOpen(true); }}
                         className="text-red-600 hover:text-red-900 font-medium"
                       >
                         حذف
@@ -242,6 +256,15 @@ export default function Categories() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="حذف التصنيف"
+        message="هل أنت متأكد من حذف هذا التصنيف؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => { setConfirmOpen(false); setDeleteTargetId(null); }}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

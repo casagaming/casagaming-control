@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { db } from "@/lib/db";
 import { Plus, X } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function Shipping() {
   const [rates, setRates] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     wilaya_id: 1,
     wilaya_name_ar: "",
@@ -250,12 +254,7 @@ export default function Shipping() {
                         تعديل
                       </button>
                       <button 
-                        onClick={async () => {
-                          if (confirm("هل أنت متأكد من حذف سعر الشحن؟")) {
-                            await db.execute({ sql: "DELETE FROM shipping_rates WHERE id = ?", args: [rate.id] });
-                            fetchRates();
-                          }
-                        }}
+                        onClick={() => { setDeleteTargetId(rate.id as number); setConfirmOpen(true); }}
                         className="text-red-600 hover:text-red-900 font-medium"
                       >
                         حذف
@@ -268,6 +267,28 @@ export default function Shipping() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmOpen}
+        title="حذف سعر الشحن"
+        message="هل أنت متأكد من حذف هذا السعر؟ لا يمكن التراجع عن هذا الإجراء."
+        onConfirm={async () => {
+          if (!deleteTargetId) return;
+          try {
+            setIsDeleting(true);
+            await db.execute({ sql: "DELETE FROM shipping_rates WHERE id = ?", args: [deleteTargetId] });
+            fetchRates();
+            setConfirmOpen(false);
+          } catch {
+            alert("فشل حذف سعر الشحن");
+          } finally {
+            setIsDeleting(false);
+            setDeleteTargetId(null);
+          }
+        }}
+        onCancel={() => { setConfirmOpen(false); setDeleteTargetId(null); }}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }
