@@ -1,198 +1,240 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Plus, Edit, Trash2, Image as ImageIcon } from 'lucide-react';
+import { db } from '../lib/db';
+import { uploadImage, deleteImage } from '../lib/cloudinary';
 import toast from 'react-hot-toast';
+import { Plus, Trash2, Image as ImageIcon, Loader2, EyeOff } from 'lucide-react';
+
+interface Banner {
+  id: string;
+  image_url: string;
+  title: string | null;
+  link_url: string | null;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
+}
 
 export default function Banners() {
-  const [banners, setBanners] = useState([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [currentBanner, setCurrentBanner] = useState<any>(null);
-
-  const fetchBanners = async () => {
-    try {
-      const res = await axios.get('/api/banners');
-      setBanners(res.data);
-    } catch (error) {
-      toast.error('فشل في جلب البانرات');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
+  const [form, setForm] = useState({ is_active: true, image_url: '' });
 
   useEffect(() => {
     fetchBanners();
   }, []);
 
-  const handleDelete = async (id: number) => {
-    if (confirm('هل أنت متأكد من حذف هذا البانر؟')) {
-      try {
-        await axios.delete(`/api/banners/${id}`);
-        toast.success('تم حذف البانر بنجاح');
-        fetchBanners();
-      } catch (error) {
-        toast.error('فشل في حذف البانر');
-      }
-    }
-  };
-
-  const openModal = (banner = null) => {
-    setCurrentBanner(banner || { image_url: '', title: '', link_url: '', order_index: 0, is_active: true });
-    setIsModalOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function fetchBanners() {
     try {
-      if (currentBanner.id) {
-        await axios.put(`/api/banners/${currentBanner.id}`, currentBanner);
-        toast.success('تم تحديث البانر بنجاح');
-      } else {
-        await axios.post('/api/banners', currentBanner);
-        toast.success('تم إضافة البانر بنجاح');
-      }
-      setIsModalOpen(false);
-      fetchBanners();
-    } catch (error) {
-      toast.error('حدث خطأ أثناء حفظ البانر');
+      const data = await db.banners.list();
+      setBanners(data || []);
+    } catch (error: any) {
+      toast.error('حدث خطأ أثناء تحميل البنرات: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const formData = new FormData();
-    formData.append('image', file);
-
+    setUploading(true);
     try {
-      const res = await axios.post('/api/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setCurrentBanner({ ...currentBanner, image_url: res.data.url });
-      toast.success('تم رفع الصورة بنجاح');
-    } catch (error) {
+      const url = await uploadImage(file);
+      if (url) {
+        setForm({ ...form, image_url: url });
+        toast.success('تم رفع الصورة بنجاح');
+      }
+    } catch {
       toast.error('فشل في رفع الصورة');
+    } finally {
+      setUploading(false);
     }
-  };
+  }
 
-  if (loading) return <div className="p-8 text-center">جاري التحميل...</div>;
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.image_url) {
+      toast.error('يرجى اختيار صورة للبنر');
+      return;
+    }
+    setLoading(true);
+    try {
+      if (editingBanner) {
+        await db.banners.update(editingBanner.id, { is_active: form.is_active, image_url: form.image_url });
+        toast.success('تم تحديث البنر بنجاح');
+      } else {
+        await db.banners.create({ is_active: form.is_active, image_url: form.image_url, order_index: banners.length });
+        toast.success('تم إضافة البنر بنجاح');
+      }
+      closeModal();
+      fetchBanners();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(banner: Banner) {
+    if (!confirm('هل أنت متأكد من حذف هذا البنر؟')) return;
+    try {
+      await db.banners.delete(banner.id);
+      toast.success('تم حذف البنر');
+      fetchBanners();
+    } catch (error: any) {
+      toast.error('فشل في الحذف: ' + error.message);
+    }
+  }
+
+  function openModal(banner: Banner | null = null) {
+    if (banner) {
+      setEditingBanner(banner);
+      setForm({ is_active: Boolean(banner.is_active), image_url: banner.image_url });
+    } else {
+      setEditingBanner(null);
+      setForm({ is_active: true, image_url: '' });
+    }
+    setIsModalOpen(true);
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+    setEditingBanner(null);
+  }
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">إدارة البانرات</h1>
-        <button 
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">إدارة البنرات</h1>
+          <p className="text-sm text-gray-500 mt-1 text-right">تحكم في الصور المنزلقة المعروضة في الصفحة الرئيسية للمتجر.</p>
+        </div>
+        <button
           onClick={() => openModal()}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
+          className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 font-bold"
         >
           <Plus className="w-5 h-5" />
-          إضافة بانر
+          إضافة بنر جديد
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="p-4 font-medium text-gray-500">الصورة</th>
-                <th className="p-4 font-medium text-gray-500">العنوان</th>
-                <th className="p-4 font-medium text-gray-500">الرابط</th>
-                <th className="p-4 font-medium text-gray-500">الترتيب</th>
-                <th className="p-4 font-medium text-gray-500">الحالة</th>
-                <th className="p-4 font-medium text-gray-500">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {banners.map((banner: any) => (
-                <tr key={banner.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="p-4">
-                    {banner.image_url ? (
-                      <img src={banner.image_url} alt={banner.title} className="w-24 h-12 rounded-lg object-cover border border-gray-200" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-24 h-12 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                        <ImageIcon className="w-6 h-6" />
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-4 font-medium text-gray-900">{banner.title || '-'}</td>
-                  <td className="p-4 text-gray-500 font-mono text-sm" dir="ltr">{banner.link_url || '-'}</td>
-                  <td className="p-4 text-gray-600">{banner.order_index}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${banner.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>
-                      {banner.is_active ? 'مفعّل' : 'معطّل'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => openModal(banner)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => handleDelete(banner.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading && banners.length === 0 ? (
+          <div className="col-span-full py-20 flex flex-col items-center gap-3">
+            <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+            <span className="text-gray-500 font-medium">جاري تحميل البنرات...</span>
+          </div>
+        ) : banners.length === 0 ? (
+          <div className="col-span-full py-20 bg-white rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center gap-4 text-gray-400">
+            <ImageIcon className="w-12 h-12" />
+            <p className="font-bold">لا توجد بنرات حالياً</p>
+          </div>
+        ) : (
+          banners.map((banner) => (
+            <div key={banner.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden group hover:border-indigo-200 transition-all">
+              <div className="relative aspect-[16/9] bg-gray-100">
+                <img src={banner.image_url} alt={banner.title || ''} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => openModal(banner)}
+                    className="p-2 bg-white text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors shadow-lg"
+                  >
+                    <ImageIcon className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(banner)}
+                    className="p-2 bg-white text-red-600 rounded-lg hover:bg-red-50 transition-colors shadow-lg"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+                {!banner.is_active && (
+                  <div className="absolute top-2 left-2 bg-gray-900/80 text-white px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1">
+                    <EyeOff className="w-3 h-3" />
+                    غير نشط
+                  </div>
+                )}
+              </div>
+              <div className="p-4">
+                <span className="text-[10px] font-mono text-gray-400">#{banner.order_index}</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold">{currentBanner.id ? 'تعديل بانر' : 'إضافة بانر جديد'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg">✕</button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal}></div>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingBanner ? 'تعديل البنر' : 'إضافة بنر جديد'}
+              </h2>
             </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">العنوان (اختياري)</label>
-                <input type="text" value={currentBanner.title} onChange={e => setCurrentBanner({...currentBanner, title: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">الرابط عند الضغط (اختياري)</label>
-                <input type="text" value={currentBanner.link_url} onChange={e => setCurrentBanner({...currentBanner, link_url: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ترتيب العرض</label>
-                <input required type="number" value={currentBanner.order_index} onChange={e => setCurrentBanner({...currentBanner, order_index: Number(e.target.value)})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">صورة البانر</label>
-                <div className="flex items-center gap-4">
-                  {currentBanner.image_url ? (
-                    <div className="relative w-full h-32 rounded-xl border border-gray-200 overflow-hidden group">
-                      <img src={currentBanner.image_url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      <button type="button" onClick={() => setCurrentBanner({...currentBanner, image_url: ''})} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Trash2 className="w-6 h-6" />
-                      </button>
-                    </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+              <div className="space-y-4">
+                <label className="block text-sm font-bold text-gray-700 text-right">صورة البنر</label>
+                <div className="relative aspect-[16/9] rounded-xl overflow-hidden border-2 border-gray-100 shadow-sm bg-gray-50 flex items-center justify-center group">
+                  {form.image_url ? (
+                    <>
+                      <img src={form.image_url} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <label className="p-2 bg-white text-indigo-600 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors shadow-lg">
+                          <ImageIcon className="w-5 h-5" />
+                          <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploading} />
+                        </label>
+                      </div>
+                    </>
                   ) : (
-                    <label className="w-full h-32 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors cursor-pointer bg-gray-50">
-                      <ImageIcon className="w-8 h-8 mb-2" />
-                      <span className="text-sm font-medium">رفع صورة</span>
-                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                    <label className="flex flex-col items-center gap-2 cursor-pointer text-gray-400 hover:text-indigo-500 transition-colors">
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+                          <span className="text-sm font-bold text-gray-500">جاري الرفع...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-10 h-10 text-gray-400" />
+                          <span className="text-sm font-bold">رفع صورة</span>
+                        </>
+                      )}
+                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={uploading} />
                     </label>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <input type="checkbox" id="is_active" checked={currentBanner.is_active} onChange={e => setCurrentBanner({...currentBanner, is_active: e.target.checked})} className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
-                <label htmlFor="is_active" className="text-sm font-medium text-gray-700 cursor-pointer">تفعيل البانر</label>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <span className="text-sm font-bold text-gray-700">تفعيل البنر</span>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, is_active: !form.is_active })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_active ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 mt-6 border-t border-gray-100">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl text-gray-700 font-medium hover:bg-gray-100 transition-colors">إلغاء</button>
-                <button type="submit" className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition-colors shadow-sm">حفظ</button>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-3 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || uploading}
+                  className="flex-1 bg-indigo-600 text-white rounded-xl py-3 font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingBanner ? 'حفظ التغييرات' : 'إضافة الآن'}
+                </button>
               </div>
             </form>
           </div>
