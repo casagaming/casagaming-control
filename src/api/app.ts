@@ -12,8 +12,10 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Force HTTPS (not WebSocket) so it works in serverless environments like Vercel
+const tursoUrl = (process.env.TURSO_DATABASE_URL || '').replace(/^libsql:\/\//, 'https://');
 const db = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
+  url: tursoUrl,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
@@ -115,7 +117,12 @@ async function initDb() {
   }
 }
 
-export const dbReady = initDb().catch(console.error);
+// Run init in background with a 8s timeout so it never blocks requests
+const initWithTimeout = Promise.race([
+  initDb(),
+  new Promise<void>((_, reject) => setTimeout(() => reject(new Error('initDb timeout')), 8000)),
+]);
+initWithTimeout.catch(err => console.error('initDb error:', err));
 
 function parseJson(val: any): any {
   if (val === null || val === undefined) return null;
