@@ -38,16 +38,18 @@ export default function Layout() {
     const channel = pusher.subscribe("orders-channel");
     channel.bind("new-order", (data: any) => {
       setNotifications((prev) => [data, ...prev]);
-      // Play sound
+      // Play notification sound
       try {
-        const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-        audio.play();
+        const audio = new Audio("https://res.cloudinary.com/ddsikz7wq/video/upload/v1773411583/%D9%86%D8%BA%D9%85%D9%87_%D8%B1%D8%B3%D8%A7%D8%A6%D9%84_%D8%A7%D9%8A%D9%81%D9%88%D9%86_%D8%A7%D9%84%D8%A7%D8%B5%D9%84%D9%8A%D9%87_%D8%A7%D9%84%D8%A7%D9%8A%D9%81%D9%88%D9%86_11%D8%A8%D8%B1%D9%88_2021_320_qa8kbe.mp3");
+        audio.volume = 1.0;
+        audio.play().catch(() => {});
       } catch (e) {}
-      
+
       // Browser notification
       if (Notification.permission === "granted") {
-        new Notification("طلب جديد!", {
-          body: `تم استلام طلب جديد من ${data.customer_name || 'زبون'}`,
+        new Notification("طلب جديد! 🛒", {
+          body: `تم استلام طلب جديد من ${data.customer_name || 'زبون'} - ${data.total_price ? data.total_price + ' د.ج' : ''}`,
+          icon: "/favicon.ico",
         });
       }
     });
