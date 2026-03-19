@@ -10,31 +10,37 @@ import multer from 'multer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize Turso DB
-const db = createClient({
-  url: 'libsql://casagaming1-casagaming.aws-eu-west-1.turso.io',
-  authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzM4NDMwNTUsImlkIjoiMDE5Y2ZmNjQtODQwMS03OTE4LTkwYWMtYzg0NDVjMmU5YTJhIiwicmlkIjoiNmY0ZmRlMDYtMmYwYy00YzcyLTkxY2EtOGVmNDFjMGIxMDllIn0.EweA6uglQr4xeH5cXXbM6Jdlb9m8EMWzaRKMRbpQxOttCLaFI0Gn_2MurLDO-yo1e8eS_vavGGZcnn30oQqUDg'
-});
+// Initialize Turso DB - credentials loaded from environment secrets (falls back to empty for graceful startup)
+const tursoUrl = process.env.TURSO_DATABASE_URL || '';
+const tursoToken = process.env.TURSO_AUTH_TOKEN || '';
+const dbEnabled = Boolean(tursoUrl);
+const db = dbEnabled
+  ? createClient({ url: tursoUrl, authToken: tursoToken })
+  : null as any;
 
-// Initialize Cloudinary
+// Initialize Cloudinary - credentials loaded from environment secrets
 cloudinary.v2.config({
-  cloud_name: 'ddsikz7wq',
-  api_key: '728859884445323',
-  api_secret: 'qJBcAxrhV_loi85MYP8OK_F_IcY'
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || '',
+  api_key: process.env.CLOUDINARY_API_KEY || '',
+  api_secret: process.env.CLOUDINARY_API_SECRET || ''
 });
 
-// Initialize Pusher
+// Initialize Pusher - credentials loaded from environment secrets
 const pusher = new Pusher({
-  appId: "2129205",
-  key: "6f398ffd3b06e741d29f",
-  secret: "f4926e3de762bd1f28fe",
-  cluster: "eu",
+  appId: process.env.PUSHER_APP_ID || '',
+  key: process.env.PUSHER_KEY || '',
+  secret: process.env.PUSHER_SECRET || '',
+  cluster: process.env.PUSHER_CLUSTER || 'eu',
   useTLS: true
 });
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 async function initializeDB() {
+  if (!dbEnabled) {
+    console.warn('TURSO_DATABASE_URL not set — skipping DB initialization. API routes will be unavailable.');
+    return;
+  }
   try {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -158,7 +164,7 @@ async function initializeDB() {
 async function startServer() {
   await initializeDB();
   const app = express();
-  const PORT = 3000;
+  const PORT = 5000;
 
   app.use(express.json());
 
@@ -280,7 +286,7 @@ async function startServer() {
       res.json(result.rows[0]);
     } catch (error) {
       console.error('Failed to create product:', error);
-      res.status(500).json({ error: 'Failed to create product', details: error.message });
+      res.status(500).json({ error: 'Failed to create product', details: (error as any).message });
     }
   });
 
@@ -371,8 +377,6 @@ async function startServer() {
   });
 
   app.post('/api/orders', async (req, res) => {
-    // This would typically be called from the storefront, not the admin panel
-    // but we include it to trigger Pusher for testing
     const { customer_name, phone, wilaya, commune, address, total_price, shipping_price, items } = req.body;
     try {
       const result = await db.execute({
@@ -389,6 +393,20 @@ async function startServer() {
         });
       }
       
+      // Deduct stock for each ordered item automatically
+      for (const item of items) {
+        if (item.variant_id) {
+          await db.execute({
+            sql: 'UPDATE product_variants SET stock = MAX(0, stock - ?) WHERE id = ?',
+            args: [item.quantity, item.variant_id]
+          });
+        }
+        await db.execute({
+          sql: 'UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?',
+          args: [item.quantity, item.product_id]
+        });
+      }
+
       // Trigger Pusher notification
       pusher.trigger('orders-channel', 'new-order', {
         id: orderId,
@@ -540,7 +558,7 @@ async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, allowedHosts: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);

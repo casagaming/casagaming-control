@@ -34,7 +34,7 @@ export default function Orders() {
           LEFT JOIN product_variants pv ON oi.variant_id = pv.id 
           WHERE oi.order_id = ?
         `,
-        args: [order.id]
+        args: [order.id],
       });
       setOrderItems(res.rows);
     } catch (error) {
@@ -44,13 +44,47 @@ export default function Orders() {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    const oldStatus = selectedOrder?.status as string;
     try {
       setIsUpdatingStatus(true);
+
+      // When cancelling: restore stock for all order items
+      if (newStatus === 'cancelled' && oldStatus !== 'cancelled') {
+        for (const item of orderItems) {
+          if (item.variant_id) {
+            await db.execute({
+              sql: "UPDATE product_variants SET stock = stock + ? WHERE id = ?",
+              args: [item.quantity, item.variant_id],
+            });
+          }
+          await db.execute({
+            sql: "UPDATE products SET stock = stock + ? WHERE id = ?",
+            args: [item.quantity, item.product_id],
+          });
+        }
+      }
+
+      // When un-cancelling: deduct stock again
+      if (oldStatus === 'cancelled' && newStatus !== 'cancelled') {
+        for (const item of orderItems) {
+          if (item.variant_id) {
+            await db.execute({
+              sql: "UPDATE product_variants SET stock = MAX(0, stock - ?) WHERE id = ?",
+              args: [item.quantity, item.variant_id],
+            });
+          }
+          await db.execute({
+            sql: "UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?",
+            args: [item.quantity, item.product_id],
+          });
+        }
+      }
+
       await db.execute({
         sql: "UPDATE orders SET status = ? WHERE id = ?",
-        args: [newStatus, orderId]
+        args: [newStatus, orderId],
       });
-      // Update local state
+
       setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder({ ...selectedOrder, status: newStatus });
@@ -97,7 +131,7 @@ export default function Orders() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-900">تفاصيل الطلب #{selectedOrder.id.substring(0, 8)}</h2>
+                <h2 className="text-xl font-bold text-gray-900">تفاصيل الطلب #{String(selectedOrder.id).substring(0, 8)}</h2>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedOrder.status as string)}`}>
                   {getStatusText(selectedOrder.status as string)}
                 </span>
@@ -106,12 +140,12 @@ export default function Orders() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {/* Order Status Update */}
+              {/* Status Update */}
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
                 <span className="font-medium text-gray-700">تحديث حالة الطلب:</span>
-                <select 
+                <select
                   value={selectedOrder.status as string}
                   onChange={(e) => updateOrderStatus(selectedOrder.id as string, e.target.value)}
                   disabled={isUpdatingStatus}
@@ -182,7 +216,7 @@ export default function Orders() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {orderItems.map((item) => {
-                        let images = [];
+                        let images: string[] = [];
                         try {
                           images = JSON.parse(item.image_url as string || "[]");
                         } catch (e) {}
@@ -201,7 +235,7 @@ export default function Orders() {
                             <td className="px-4 py-3 text-gray-500">{item.variant_name || '-'}</td>
                             <td className="px-4 py-3 text-center font-medium">{item.quantity}</td>
                             <td className="px-4 py-3">{item.price} د.ج</td>
-                            <td className="px-4 py-3 font-medium text-indigo-600">{item.price * item.quantity} د.ج</td>
+                            <td className="px-4 py-3 font-medium text-indigo-600">{(item.price as number) * (item.quantity as number)} د.ج</td>
                           </tr>
                         );
                       })}
@@ -210,7 +244,7 @@ export default function Orders() {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-gray-100 shrink-0 flex justify-end">
               <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-colors">
                 إغلاق
@@ -243,7 +277,7 @@ export default function Orders() {
               ) : (
                 orders.map((order) => (
                   <tr key={order.id as number} className="hover:bg-gray-50/50">
-                    <td className="px-6 py-4 font-medium">#{order.id.substring(0, 8)}</td>
+                    <td className="px-6 py-4 font-medium">#{String(order.id).substring(0, 8)}</td>
                     <td className="px-6 py-4">{order.customer_name}</td>
                     <td className="px-6 py-4" dir="ltr">{new Date(order.created_at as string).toLocaleDateString('ar-DZ')}</td>
                     <td className="px-6 py-4 font-medium text-indigo-600">{order.total_price} د.ج</td>
@@ -253,7 +287,7 @@ export default function Orders() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <button 
+                      <button
                         onClick={() => openOrderDetails(order)}
                         className="text-indigo-600 hover:text-indigo-900 font-medium bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
                       >
