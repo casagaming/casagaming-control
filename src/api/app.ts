@@ -27,6 +27,98 @@ const pusher = new Pusher({
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+async function initDb() {
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS categories (
+      id TEXT PRIMARY KEY, name_ar TEXT NOT NULL, name_en TEXT NOT NULL,
+      slug TEXT NOT NULL, image_url TEXT, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY, name_ar TEXT NOT NULL, name_en TEXT NOT NULL,
+      slug TEXT, description_ar TEXT, description_en TEXT,
+      price REAL NOT NULL, original_price REAL,
+      image_url TEXT NOT NULL DEFAULT '[]', images TEXT NOT NULL DEFAULT '[]',
+      category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+      stock INTEGER NOT NULL DEFAULT 0, is_featured INTEGER NOT NULL DEFAULT 0,
+      is_new INTEGER NOT NULL DEFAULT 1, is_sale INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS product_variants (
+      id TEXT PRIMARY KEY, product_id TEXT REFERENCES products(id) ON DELETE CASCADE,
+      name_ar TEXT NOT NULL, name_en TEXT NOT NULL, image_url TEXT,
+      stock INTEGER NOT NULL DEFAULT 0, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS shipping_rates (
+      id TEXT PRIMARY KEY, wilaya_name_ar TEXT NOT NULL, wilaya_name_en TEXT NOT NULL,
+      wilaya_id INTEGER NOT NULL, home_delivery_price REAL NOT NULL,
+      desk_delivery_price REAL, return_price REAL NOT NULL,
+      delivery_time TEXT, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY, customer_name TEXT NOT NULL, phone TEXT NOT NULL,
+      wilaya TEXT NOT NULL, commune TEXT, address TEXT NOT NULL,
+      total_price REAL NOT NULL, shipping_price REAL NOT NULL,
+      status TEXT DEFAULT 'pending', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS order_items (
+      id TEXT PRIMARY KEY, order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
+      product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+      variant_id TEXT REFERENCES product_variants(id) ON DELETE SET NULL,
+      quantity INTEGER NOT NULL DEFAULT 1, price REAL NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS store_config (
+      id INTEGER PRIMARY KEY DEFAULT 1, store_name TEXT NOT NULL DEFAULT 'My Store',
+      logo_url TEXT, hero_images TEXT DEFAULT '[]',
+      contact_phone TEXT, contact_email TEXT, contact_address TEXT,
+      facebook_url TEXT, instagram_url TEXT, twitter_url TEXT,
+      whatsapp_number TEXT, updated_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS banners (
+      id TEXT PRIMARY KEY, image_url TEXT NOT NULL, title TEXT,
+      link_url TEXT, order_index INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1, created_at TEXT)`,
+  ];
+  for (const sql of stmts) {
+    await db.execute(sql);
+  }
+  // Seed shipping rates if table is empty
+  const check = await db.execute('SELECT COUNT(*) as cnt FROM shipping_rates');
+  if (Number((check.rows[0] as any).cnt) === 0) {
+    const wilayas = [
+      [1,'أدرار','Adrar',1400,750,50,'J+5'],[2,'الشلف','Chlef',850,450,50,'J+1'],
+      [3,'الأغواط','Laghouat',950,450,50,'J+1'],[4,'أم البواقي','Oum El Bouaghi',900,450,50,'J+1'],
+      [5,'باتنة','Batna',850,450,50,'J+1'],[6,'بجاية','Béjaïa',850,450,50,'J+1'],
+      [7,'بسكرة','Biskra',950,450,50,'J+1'],[8,'بشار','Béchar',1200,450,50,'J+3'],
+      [9,'البليدة','Blida',700,450,50,'J+1'],[10,'البويرة','Bouira',700,450,50,'J+1'],
+      [11,'تمنراست','Tamanrasset',1600,900,50,'J+5'],[12,'تبسة','Tébessa',900,450,50,'J+1'],
+      [13,'تلمسان','Tlemcen',850,450,50,'J+1'],[14,'تيارت','Tiaret',850,450,50,'J+1'],
+      [15,'تيزي وزو','Tizi Ouzou',700,450,50,'J+1'],[16,'الجزائر','Alger',500,400,50,'J+1'],
+      [17,'الجلفة','Djelfa',950,450,50,'J+1'],[18,'جيجل','Jijel',850,450,50,'J+1'],
+      [19,'سطيف','Sétif',850,450,50,'J+1'],[20,'سعيدة','Saïda',900,450,50,'J+1'],
+      [21,'سكيكدة','Skikda',900,450,50,'J+1'],[22,'سيدي بلعباس','Sidi Bel Abbès',850,450,50,'J+1'],
+      [23,'عنابة','Annaba',850,450,50,'J+1'],[24,'قالمة','Guelma',900,450,50,'J+1'],
+      [25,'قسنطينة','Constantine',850,450,50,'J+1'],[26,'المدية','Médéa',800,450,50,'J+1'],
+      [27,'مستغانم','Mostaganem',850,450,50,'J+1'],[28,'المسيلة',"M'sila",850,450,50,'J+1'],
+      [29,'معسكر','Mascara',850,450,50,'J+1'],[30,'ورقلة','Ouargla',1000,450,50,'J+2'],
+      [31,'وهران','Oran',850,450,50,'J+1'],[32,'البيض','El Bayadh',1100,450,50,'J+2'],
+      [33,'إليزي','Illizi',1600,1000,50,'J+9'],[34,'برج بوعريريج','Bordj Bou Arreridj',850,450,50,'J+1'],
+      [35,'بومرداس','Boumerdès',500,350,50,'J+1'],[36,'الطارف','El Tarf',900,450,50,'J+1'],
+      [37,'تندوف','Tindouf',1500,null,50,'J+5'],[38,'تيسمسيلت','Tissemsilt',850,450,50,'J+1'],
+      [39,'الوادي','El Oued',1000,450,50,'J+2'],[40,'خنشلة','Khenchela',900,450,50,'J+1'],
+      [41,'سوق أهراس','Souk Ahras',900,450,50,'J+1'],[42,'تيبازة','Tipaza',700,450,50,'J+1'],
+      [43,'ميلة','Mila',850,450,50,'J+1'],[44,'عين الدفلة','Aïn Defla',850,450,50,'J+1'],
+      [45,'النعامة','Naâma',1100,450,50,'J+2'],[46,'عين تموشنت','Aïn Témouchent',850,450,50,'J+1'],
+      [47,'غرداية','Ghardaïa',1000,450,50,'J+2'],[48,'غليزان','Relizane',850,450,50,'J+1'],
+      [49,'تيميمون','Timimoun',1500,null,50,'J+5'],[50,'برج باجي مختار','Bordj Badji Mokhtar',1600,null,50,'J+4'],
+      [51,'أولاد جلال','Ouled Djellal',1000,450,50,'J+1'],[52,'بني عباس','Beni Abbes',1200,null,50,'J+3'],
+      [53,'عين صالح','In Salah',1600,800,50,'J+5'],[54,'عين قزام','In Guezzam',1500,null,50,'J+5'],
+      [55,'تقرت','Touggourt',1000,450,50,'J+2'],[56,'جانت','Djanet',1650,1100,50,'J+9'],
+      [57,'المغير',"El M'Ghair",1000,550,50,'J+3'],[58,'المنيعة','El Meniaa',1000,null,50,'J+3'],
+    ];
+    for (const [wid, ar, en, home, desk, ret, time] of wilayas) {
+      await db.execute({
+        sql: 'INSERT INTO shipping_rates (id, wilaya_id, wilaya_name_ar, wilaya_name_en, home_delivery_price, desk_delivery_price, return_price, delivery_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [randomUUID(), wid, ar, en, home, desk ?? null, ret, time, new Date().toISOString()]
+      });
+    }
+  }
+}
+
+initDb().catch(console.error);
+
 function parseJson(val: any): any {
   if (val === null || val === undefined) return null;
   if (typeof val === 'string') {
