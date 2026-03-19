@@ -4,28 +4,24 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "PORT=5000 tsx server.ts",
+    "dev": "tsx server.ts",
     "build": "vite build",
-    "start": "NODE_ENV=production tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "start": "node server.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
     "@libsql/client": "^0.17.0",
-    "@supabase/supabase-js": "^2.99.1",
     "@tailwindcss/vite": "^4.1.14",
-    "@types/cors": "^2.8.19",
     "@vitejs/plugin-react": "^5.0.4",
-    "better-sqlite3": "^12.4.1",
+    "axios": "^1.13.6",
     "cloudinary": "^2.9.0",
-    "clsx": "^2.1.1",
-    "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "framer-motion": "^12.36.0",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "multer": "^2.1.1",
@@ -35,9 +31,7 @@
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.13.1",
-    "serverless-http": "^4.0.0",
-    "tailwind-merge": "^3.5.0",
-    "tailwindcss-animate": "^1.0.7"
+    "vite": "^6.2.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.25",
@@ -47,6 +41,6 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.0"
   }
 }

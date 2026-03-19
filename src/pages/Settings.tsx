@@ -1,261 +1,143 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../lib/db';
+import axios from 'axios';
+import { Image as ImageIcon, Trash2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { uploadImage, deleteImage } from '../lib/cloudinary';
-import { Upload, X, Loader2, Store, Phone, Mail, MapPin, Facebook, Instagram, MessageCircle } from 'lucide-react';
-import { StoreConfig } from '../types/database';
 
 export default function Settings() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  
-  const [config, setConfig] = useState<StoreConfig>({
-    id: 1,
-    store_name: 'CASA GAMING',
-    logo_url: '',
-    hero_images: [],
-    contact_phone: '',
-    contact_email: '',
-    contact_address: '',
-    facebook_url: '',
-    instagram_url: '',
-    twitter_url: '',
-    whatsapp_number: '',
+  const [config, setConfig] = useState({
+    name: '', logo: '', phone: '', email: '', address: '',
+    facebook: '', instagram: '', whatsapp: ''
   });
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
+  const fetchConfig = async () => {
     try {
-      const data = await db.storeConfig.get();
-      if (data) setConfig(data);
-    } catch (error: any) {
-      toast.error(error.message);
+      const res = await axios.get('/api/store-config');
+      if (res.data && Object.keys(res.data).length > 0) {
+        setConfig(res.data);
+      }
+    } catch (error) {
+      toast.error('فشل في جلب إعدادات المتجر');
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.put('/api/store-config', config);
+      toast.success('تم حفظ الإعدادات بنجاح');
+    } catch (error) {
+      toast.error('حدث خطأ أثناء حفظ الإعدادات');
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadingLogo(true);
-    try {
-      const url = await uploadImage(file);
-      if (url) {
-        if (config.logo_url) await deleteImage(config.logo_url);
-        setConfig({ ...config, logo_url: url });
-        toast.success('تم رفع الشعار بنجاح');
-      } else {
-        toast.error('فشل في رفع الشعار');
-      }
-    } catch (error: any) {
-      toast.error('حدث خطأ: ' + (error.message || ''));
-    } finally {
-      setUploadingLogo(false);
-    }
-  }
 
-  async function handleRemoveLogo() {
-    if (!config.logo_url) return;
-    setUploadingLogo(true);
-    try {
-      await deleteImage(config.logo_url);
-      setConfig({ ...config, logo_url: '' });
-      toast.success('تم حذف الشعار');
-    } catch {
-      toast.error('فشل في حذف الشعار');
-    } finally {
-      setUploadingLogo(false);
-    }
-  }
+    const formData = new FormData();
+    formData.append('image', file);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
     try {
-      await db.storeConfig.save(config);
-      toast.success('تم حفظ الإعدادات بنجاح');
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setSaving(false);
+      const res = await axios.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setConfig({ ...config, logo: res.data.url });
+      toast.success('تم رفع الشعار بنجاح');
+    } catch (error) {
+      toast.error('فشل في رفع الشعار');
     }
-  }
+  };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-      </div>
-    );
-  }
+  if (loading) return <div className="p-8 text-center">جاري التحميل...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Store className="w-6 h-6" />
-          إعدادات المتجر
-        </h1>
+    <div className="space-y-6 max-w-4xl mx-auto" dir="rtl">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-gray-900">إعدادات المتجر</h1>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-            <h2 className="text-lg font-semibold text-gray-900">هوية المتجر</h2>
-          </div>
-          <div className="p-6 space-y-8">
-            <div className="max-w-md">
-              <div className="space-y-4">
-                <label className="block text-sm font-bold text-gray-700">اسم المتجر</label>
-                <div className="relative">
-                  <Store className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    value={config.store_name}
-                    onChange={(e) => setConfig({ ...config, store_name: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl shadow-sm py-3 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-bold"
-                    placeholder="Enter store name"
-                  />
-                </div>
-              </div>
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 space-y-8">
+        
+        {/* Basic Info */}
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100">المعلومات الأساسية</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">اسم المتجر</label>
+              <input required type="text" value={config.name} onChange={e => setConfig({...config, name: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
             </div>
-
-            {/* Logo Upload */}
-            <div className="space-y-3">
-              <label className="block text-sm font-bold text-gray-700">شعار المتجر</label>
-              {config.logo_url ? (
-                <div className="relative inline-block group">
-                  <img src={config.logo_url} alt="Logo" className="h-24 w-24 object-cover rounded-xl border-2 border-gray-100 shadow-sm" />
-                  <button
-                    type="button"
-                    onClick={handleRemoveLogo}
-                    disabled={uploadingLogo}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:bg-red-600 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center h-24 w-24 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer hover:bg-gray-50">
-                  {uploadingLogo ? <Loader2 className="w-6 h-6 animate-spin text-indigo-600" /> : <Upload className="w-6 h-6 text-gray-400" />}
-                  <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} />
-                </label>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-              <Phone className="w-5 h-5 text-indigo-500" />
-              <h2 className="text-lg font-semibold text-gray-900">قنوات التواصل</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">رقم الهاتف</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={config.contact_phone || ''}
-                    onChange={(e) => setConfig({ ...config, contact_phone: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="0555 XX XX XX"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">البريد الإلكتروني</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="email"
-                    value={config.contact_email || ''}
-                    onChange={(e) => setConfig({ ...config, contact_email: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="support@store.com"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">العنوان</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={config.contact_address || ''}
-                    onChange={(e) => setConfig({ ...config, contact_address: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="العنوان الكامل"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex items-center gap-2">
-              <Facebook className="w-5 h-5 text-indigo-500" />
-              <h2 className="text-lg font-semibold text-gray-900">التواجد الاجتماعي</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">رقم الواتساب</label>
-                <div className="relative">
-                  <MessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={config.whatsapp_number || ''}
-                    onChange={(e) => setConfig({ ...config, whatsapp_number: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="213XXXXXXXXX"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">رابط فيسبوك</label>
-                <div className="relative">
-                  <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="url"
-                    value={config.facebook_url || ''}
-                    onChange={(e) => setConfig({ ...config, facebook_url: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="https://facebook.com/..."
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-gray-700">رابط انستقرام</label>
-                <div className="relative">
-                  <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="url"
-                    value={config.instagram_url || ''}
-                    onChange={(e) => setConfig({ ...config, instagram_url: e.target.value })}
-                    className="pl-10 block w-full border border-gray-300 rounded-xl py-2.5 px-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-bold"
-                    placeholder="https://instagram.com/..."
-                  />
-                </div>
+            
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">شعار المتجر</label>
+              <div className="flex items-center gap-4">
+                {config.logo ? (
+                  <div className="relative w-32 h-32 rounded-xl border border-gray-200 overflow-hidden group bg-gray-50 flex items-center justify-center p-2">
+                    <img src={config.logo} alt="Logo" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                    <button type="button" onClick={() => setConfig({...config, logo: ''})} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Trash2 className="w-6 h-6" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-32 h-32 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-500 hover:border-indigo-500 hover:text-indigo-500 transition-colors cursor-pointer bg-gray-50">
+                    <ImageIcon className="w-8 h-8 mb-2" />
+                    <span className="text-sm font-medium">رفع شعار</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  </label>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex justify-end pt-4">
-          <button
-            type="submit"
-            disabled={saving || uploadingLogo}
-            className="flex items-center gap-2 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-200 py-4 px-10 text-base font-black hover:bg-indigo-700 disabled:opacity-50 transition-all"
-          >
-            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
-            {saving ? 'جاري الحفظ...' : 'حفظ إعدادات المتجر'}
+        {/* Contact Info */}
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100">معلومات التواصل</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">رقم الهاتف</label>
+              <input type="text" value={config.phone} onChange={e => setConfig({...config, phone: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">البريد الإلكتروني</label>
+              <input type="email" value={config.email} onChange={e => setConfig({...config, email: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">العنوان</label>
+              <input type="text" value={config.address} onChange={e => setConfig({...config, address: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" />
+            </div>
+          </div>
+        </div>
+
+        {/* Social Links */}
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-100">روابط التواصل الاجتماعي</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">رابط فيسبوك</label>
+              <input type="url" value={config.facebook} onChange={e => setConfig({...config, facebook: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" placeholder="https://facebook.com/..." />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">رابط إنستغرام</label>
+              <input type="url" value={config.instagram} onChange={e => setConfig({...config, instagram: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" placeholder="https://instagram.com/..." />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">رقم واتساب (مع رمز الدولة)</label>
+              <input type="text" value={config.whatsapp} onChange={e => setConfig({...config, whatsapp: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-left" dir="ltr" placeholder="+213..." />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-4 border-t border-gray-100">
+          <button type="submit" className="flex items-center gap-2 px-8 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-sm">
+            <Save className="w-5 h-5" />
+            حفظ التغييرات
           </button>
         </div>
       </form>
