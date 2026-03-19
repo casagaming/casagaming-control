@@ -28,7 +28,8 @@ const pusher = new Pusher({
 const upload = multer({ storage: multer.memoryStorage() });
 
 async function initDb() {
-  const stmts = [
+  // Run all CREATE TABLE statements in a single batch round-trip
+  await db.batch([
     `CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY, name_ar TEXT NOT NULL, name_en TEXT NOT NULL,
       slug TEXT NOT NULL, image_url TEXT, created_at TEXT)`,
@@ -70,10 +71,7 @@ async function initDb() {
       id TEXT PRIMARY KEY, image_url TEXT NOT NULL, title TEXT,
       link_url TEXT, order_index INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1, created_at TEXT)`,
-  ];
-  for (const sql of stmts) {
-    await db.execute(sql);
-  }
+  ], 'write');
   // Seed shipping rates if table is empty
   const check = await db.execute('SELECT COUNT(*) as cnt FROM shipping_rates');
   if (Number((check.rows[0] as any).cnt) === 0) {
@@ -117,7 +115,7 @@ async function initDb() {
   }
 }
 
-initDb().catch(console.error);
+export const dbReady = initDb().catch(console.error);
 
 function parseJson(val: any): any {
   if (val === null || val === undefined) return null;
