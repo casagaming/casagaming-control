@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { db } from "@/lib/db";
-import { X, Package, MapPin, User, CreditCard, Clock, CheckCircle2, Truck, XCircle, Loader2, ChevronLeft } from "lucide-react";
+import { X, Package, MapPin, User, CreditCard, Clock, CheckCircle2, Truck, XCircle, Loader2, ChevronLeft, Trash2, CheckSquare, Square, SquareCheck, Bell } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
+import { usePusherOrders } from "@/lib/useNewOrders";
 
 const STATUSES = [
   { key: "all",        label: "الكل",          color: "indigo",  icon: Package },
@@ -24,6 +26,8 @@ const STATUS_TEXT: Record<string, string> = {
   shipped: "تم الشحن", delivered: "تم التوصيل", cancelled: "ملغى",
 };
 
+const AUTO_DELETE_DAYS = 21;
+
 export default function Orders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -31,8 +35,36 @@ export default function Orders() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+  const [autoDeletedCount, setAutoDeletedCount] = useState(0);
 
-  useEffect(() => { fetchOrders(); }, []);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
+  const [liveToast, setLiveToast] = useState<string | null>(null);
+  const liveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetchOrders().then(() => autoDeleteOldDelivered());
+  }, []);
+
+  const handleLiveOrder = useCallback((data: any) => {
+    fetchOrders();
+    const id = String(data.id || "");
+    if (id) {
+      setNewOrderIds(prev => new Set([...prev, id]));
+      setTimeout(() => {
+        setNewOrderIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+      }, 8000);
+    }
+    const name = data.customer_name || "زبون";
+    setLiveToast(`طلب جديد من ${name}!`);
+    if (liveToastTimer.current) clearTimeout(liveToastTimer.current);
+    liveToastTimer.current = setTimeout(() => setLiveToast(null), 5000);
+  }, []);
+
+  usePusherOrders(handleLiveOrder);
 
   async function fetchOrders() {
     try {
@@ -43,7 +75,33 @@ export default function Orders() {
     }
   }
 
+  async function autoDeleteOldDelivered() {
+    try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - AUTO_DELETE_DAYS);
+      const cutoffStr = cutoff.toISOString();
+      const old = await db.execute({
+        sql: "SELECT id FROM orders WHERE status = 'delivered' AND created_at < ?",
+        args: [cutoffStr],
+      });
+      if (old.rows.length === 0) return;
+      for (const row of old.rows) {
+        await db.execute({ sql: "DELETE FROM order_items WHERE order_id = ?", args: [row.id] });
+        await db.execute({ sql: "DELETE FROM orders WHERE id = ?", args: [row.id] });
+      }
+      setAutoDeletedCount(old.rows.length);
+      setTimeout(() => setAutoDeletedCount(0), 5000);
+      await fetchOrders();
+    } catch (err) {
+      console.error("Auto delete failed:", err);
+    }
+  }
+
   const openOrderDetails = async (order: any) => {
+    if (isSelectionMode) {
+      toggleSelect(String(order.id));
+      return;
+    }
     setSelectedOrder(order);
     setIsModalOpen(true);
     try {
@@ -87,19 +145,126 @@ export default function Orders() {
     }
   };
 
-  const filtered = activeTab === "all" ? orders : orders.filter(o => o.status === activeTab);
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(o => String(o.id))));
+    }
+  };
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    try {
+      for (const id of selectedIds) {
+        await db.execute({ sql: "DELETE FROM order_items WHERE order_id = ?", args: [id] });
+        await db.execute({ sql: "DELETE FROM orders WHERE id = ?", args: [id] });
+      }
+      setOrders(prev => prev.filter(o => !selectedIds.has(String(o.id))));
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } catch {
+      alert("فشل حذف الطلبات المحددة");
+    } finally {
+      setIsBulkDeleting(false);
+      setConfirmBulkOpen(false);
+    }
+  };
+
+  const filtered = activeTab === "all" ? orders : orders.filter(o => o.status === activeTab);
   const countFor = (key: string) => key === "all" ? orders.length : orders.filter(o => o.status === key).length;
+  const allFilteredSelected = filtered.length > 0 && selectedIds.size === filtered.length;
 
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Live new order toast */}
+      {liveToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <Bell className="w-4 h-4 shrink-0" />
+          {liveToast}
+        </div>
+      )}
+
+      {/* Auto-delete toast */}
+      {autoDeletedCount > 0 && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          تم حذف {autoDeletedCount} طلب مؤكد تجاوز {AUTO_DELETE_DAYS} يوماً تلقائياً
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">إدارة الطلبات</h1>
           <p className="text-sm text-gray-500 mt-0.5">{orders.length} طلب إجمالي</p>
         </div>
+
+        <div className="flex items-center gap-2">
+          {isSelectionMode ? (
+            <>
+              <button
+                onClick={toggleSelectAll}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                {allFilteredSelected
+                  ? <CheckSquare className="w-4 h-4 text-indigo-600" />
+                  : <Square className="w-4 h-4" />
+                }
+                {allFilteredSelected ? "إلغاء الكل" : "تحديد الكل"}
+              </button>
+
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setConfirmBulkOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  حذف المحدد ({selectedIds.size})
+                </button>
+              )}
+
+              <button
+                onClick={exitSelectionMode}
+                className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                إلغاء
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setIsSelectionMode(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <SquareCheck className="w-4 h-4" />
+              تحديد متعدد
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Selection info bar */}
+      {isSelectionMode && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 text-sm text-indigo-700 font-medium flex items-center gap-2">
+          <SquareCheck className="w-4 h-4 shrink-0" />
+          {selectedIds.size === 0
+            ? "اضغط على أي طلب لتحديده"
+            : `تم تحديد ${selectedIds.size} طلب — اضغط "حذف المحدد" للحذف`}
+        </div>
+      )}
 
       {/* Status Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
@@ -110,7 +275,7 @@ export default function Orders() {
           return (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
+              onClick={() => { setActiveTab(key); if (isSelectionMode) setSelectedIds(new Set()); }}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all shrink-0 ${
                 isActive
                   ? key === "all"
@@ -145,6 +310,8 @@ export default function Orders() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map(order => {
             const style = STATUS_STYLES[order.status as string] || STATUS_STYLES.pending;
+            const orderId = String(order.id);
+            const isSelected = selectedIds.has(orderId);
             const date = new Date(order.created_at as string);
             const timeAgo = (() => {
               const diff = Date.now() - date.getTime();
@@ -160,13 +327,35 @@ export default function Orders() {
               <div
                 key={order.id as number}
                 onClick={() => openOrderDetails(order)}
-                className={`bg-white rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-md ${style.card}`}
+                className={`bg-white rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-md relative ${
+                  isSelectionMode && isSelected
+                    ? "border-indigo-500 bg-indigo-50/40 shadow-sm shadow-indigo-100"
+                    : newOrderIds.has(String(order.id))
+                      ? "border-indigo-400 shadow-lg shadow-indigo-200 animate-pulse bg-indigo-50/30"
+                      : style.card
+                }`}
               >
+                {/* Selection checkbox */}
+                {isSelectionMode && (
+                  <div className="absolute top-3 left-3">
+                    {isSelected
+                      ? <CheckSquare className="w-5 h-5 text-indigo-600" />
+                      : <Square className="w-5 h-5 text-gray-300" />
+                    }
+                  </div>
+                )}
+
                 {/* Top row */}
-                <div className="flex items-start justify-between mb-3">
+                <div className={`flex items-start justify-between mb-3 ${isSelectionMode ? "pr-0 pl-7" : ""}`}>
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${style.dot}`} />
                     <span className="text-xs font-mono text-gray-400">#{String(order.id).substring(0, 8)}</span>
+                    {newOrderIds.has(String(order.id)) && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded-full">
+                        <Bell className="w-2.5 h-2.5" />
+                        جديد
+                      </span>
+                    )}
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${style.badge}`}>
                     {STATUS_TEXT[order.status as string] || order.status}
@@ -200,10 +389,12 @@ export default function Orders() {
                 {/* Footer */}
                 <div className="flex items-center justify-between pt-3 border-t border-gray-50">
                   <span className="text-base font-bold text-gray-900">{order.total_price} <span className="text-xs font-normal text-gray-400">د.ج</span></span>
-                  <span className="flex items-center gap-1 text-indigo-500 text-xs font-medium">
-                    عرض التفاصيل
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </span>
+                  {!isSelectionMode && (
+                    <span className="flex items-center gap-1 text-indigo-500 text-xs font-medium">
+                      عرض التفاصيل
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -215,7 +406,6 @@ export default function Orders() {
       {isModalOpen && selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className={`w-2.5 h-2.5 rounded-full ${STATUS_STYLES[selectedOrder.status as string]?.dot || "bg-gray-400"}`} />
@@ -232,7 +422,6 @@ export default function Orders() {
             </div>
 
             <div className="p-5 overflow-y-auto flex-1 space-y-4">
-              {/* Status Changer */}
               <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100">
                 <span className="text-sm font-semibold text-gray-700">تغيير الحالة</span>
                 <select
@@ -249,7 +438,6 @@ export default function Orders() {
                 </select>
               </div>
 
-              {/* Customer + Address */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
                   <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -287,7 +475,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Summary */}
               <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
                 <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-indigo-500" /> ملخص الطلب
@@ -308,7 +495,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Items */}
               {orderItems.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -351,6 +537,15 @@ export default function Orders() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmBulkOpen}
+        title="حذف الطلبات المحددة"
+        message={`هل أنت متأكد من حذف ${selectedIds.size} طلب؟ لا يمكن التراجع عن هذا الإجراء.`}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkOpen(false)}
+        isDeleting={isBulkDeleting}
+      />
 
       <style>{`.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}`}</style>
     </div>

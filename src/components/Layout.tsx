@@ -283,7 +283,7 @@ export default function Layout() {
               </button>
               {notifBlocked && sidebarExpanded && (
                 <p className="text-[10px] text-amber-600 leading-snug px-1 text-center">
-                  افتح التطبيق في متصفح خارج Replit لتفعيل الإشعارات
+                  فشل تفعيل الإشعارات، تأكد من السماح بالإشعارات في المتصفح
                 </p>
               )}
             </div>
