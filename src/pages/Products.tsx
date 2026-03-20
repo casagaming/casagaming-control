@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { db } from "@/lib/db";
-import { Plus, X, Upload, Package, Image as ImageIcon } from "lucide-react";
+import { Plus, X, Upload, Package, Image as ImageIcon, AlertTriangle, Tag, Star, Sparkles, BadgePercent, Search } from "lucide-react";
 import { uploadImage, deleteCloudinaryImage } from "@/lib/cloudinary";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -14,13 +14,15 @@ export default function Products() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [variants, setVariants] = useState<any[]>([]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     name_ar: "",
     description_ar: "",
-    price: 0,
-    original_price: 0,
-    stock: 0,
+    price: "",
+    original_price: "",
+    stock: "",
     category_id: "",
     is_featured: false,
     is_new: true,
@@ -70,9 +72,9 @@ export default function Products() {
     setFormData({
       name_ar: "",
       description_ar: "",
-      price: 0,
-      original_price: 0,
-      stock: 0,
+      price: "",
+      original_price: "",
+      stock: "",
       category_id: "",
       is_featured: false,
       is_new: true,
@@ -158,7 +160,7 @@ export default function Products() {
       const slug = `product-${Date.now()}`;
       const imagesStr = JSON.stringify(formData.image_url);
       const mainImageUrl = formData.image_url[0] || "";
-      const finalStock = variants.length > 0 ? variantsTotalStock : formData.stock;
+      const finalStock = variants.length > 0 ? variantsTotalStock : Number(formData.stock) || 0;
 
       let productId = editingId;
 
@@ -169,8 +171,8 @@ export default function Products() {
             formData.name_ar,
             formData.name_ar,
             formData.description_ar,
-            formData.price,
-            formData.original_price,
+            Number(formData.price) || 0,
+            Number(formData.original_price) || 0,
             finalStock,
             formData.category_id || null,
             formData.is_featured ? 1 : 0,
@@ -194,8 +196,8 @@ export default function Products() {
             formData.name_ar,
             formData.name_ar,
             formData.description_ar,
-            formData.price,
-            formData.original_price,
+            Number(formData.price) || 0,
+            Number(formData.original_price) || 0,
             finalStock,
             formData.category_id || null,
             formData.is_featured ? 1 : 0,
@@ -222,9 +224,9 @@ export default function Products() {
       setFormData({
         name_ar: "",
         description_ar: "",
-        price: 0,
-        original_price: 0,
-        stock: 0,
+        price: "",
+        original_price: "",
+        stock: "",
         category_id: "",
         is_featured: false,
         is_new: true,
@@ -240,10 +242,55 @@ export default function Products() {
     }
   };
 
+  const filteredProducts = useMemo(() => {
+    let list = products;
+    if (activeFilter === "low-stock") list = list.filter(p => Number(p.stock) > 0 && Number(p.stock) < 10);
+    else if (activeFilter === "out-of-stock") list = list.filter(p => Number(p.stock) === 0);
+    else if (activeFilter === "featured") list = list.filter(p => Boolean(p.is_featured));
+    else if (activeFilter === "new") list = list.filter(p => Boolean(p.is_new));
+    else if (activeFilter === "sale") list = list.filter(p => Boolean(p.is_sale));
+    else if (activeFilter.startsWith("cat:")) {
+      const catId = activeFilter.replace("cat:", "");
+      list = list.filter(p => String(p.category_id) === catId);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(p => String(p.name_ar || "").toLowerCase().includes(q));
+    }
+    return list;
+  }, [products, activeFilter, searchQuery]);
+
+  const counts = useMemo(() => ({
+    all: products.length,
+    lowStock: products.filter(p => Number(p.stock) > 0 && Number(p.stock) < 10).length,
+    outOfStock: products.filter(p => Number(p.stock) === 0).length,
+    featured: products.filter(p => Boolean(p.is_featured)).length,
+    isNew: products.filter(p => Boolean(p.is_new)).length,
+    sale: products.filter(p => Boolean(p.is_sale)).length,
+  }), [products]);
+
   return (
     <div className="space-y-6 relative">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">إدارة المنتجات</h1>
+      <div className="flex items-center gap-3 flex-wrap">
+        <h1 className="text-2xl font-bold text-gray-900 ml-auto">إدارة المنتجات</h1>
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="ابحث عن منتج..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="pr-9 pl-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-52"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         <button
           onClick={openAddModal}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
@@ -251,6 +298,106 @@ export default function Products() {
           <Plus className="w-5 h-5" />
           إضافة منتج
         </button>
+      </div>
+
+      {/* Smart Filter Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-wrap">
+
+          {/* الكل */}
+          <button
+            onClick={() => setActiveFilter("all")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "all" ? "bg-indigo-600 text-white border-indigo-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"}`}
+          >
+            <Package className="w-3.5 h-3.5" />
+            الكل
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"}`}>{counts.all}</span>
+          </button>
+
+          {/* نفد المخزون */}
+          {counts.outOfStock > 0 && (
+            <button
+              onClick={() => setActiveFilter("out-of-stock")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "out-of-stock" ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-200 hover:border-red-400"}`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              نفد المخزون
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "out-of-stock" ? "bg-white/20 text-white" : "bg-red-200 text-red-700"}`}>{counts.outOfStock}</span>
+            </button>
+          )}
+
+          {/* مخزون منخفض */}
+          {counts.lowStock > 0 && (
+            <button
+              onClick={() => setActiveFilter("low-stock")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "low-stock" ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"}`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              مخزون منخفض
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "low-stock" ? "bg-white/20 text-white" : "bg-orange-200 text-orange-700"}`}>{counts.lowStock}</span>
+            </button>
+          )}
+
+          {/* فاصل */}
+          {categories.length > 0 && <div className="w-px bg-gray-200 self-stretch mx-1" />}
+
+          {/* التصنيفات */}
+          {categories.map(cat => {
+            const catCount = products.filter(p => String(p.category_id) === String(cat.id)).length;
+            if (catCount === 0) return null;
+            const key = `cat:${cat.id}`;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveFilter(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === key ? "bg-indigo-600 text-white border-indigo-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"}`}
+              >
+                <Tag className="w-3.5 h-3.5" />
+                {cat.name_ar}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === key ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"}`}>{catCount}</span>
+              </button>
+            );
+          })}
+
+          {/* فاصل */}
+          <div className="w-px bg-gray-200 self-stretch mx-1" />
+
+          {/* مميز */}
+          {counts.featured > 0 && (
+            <button
+              onClick={() => setActiveFilter("featured")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "featured" ? "bg-yellow-500 text-white border-yellow-500" : "bg-yellow-50 text-yellow-700 border-yellow-200 hover:border-yellow-400"}`}
+            >
+              <Star className="w-3.5 h-3.5" />
+              مميز
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "featured" ? "bg-white/20 text-white" : "bg-yellow-200 text-yellow-700"}`}>{counts.featured}</span>
+            </button>
+          )}
+
+          {/* جديد */}
+          {counts.isNew > 0 && (
+            <button
+              onClick={() => setActiveFilter("new")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "new" ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-200 hover:border-green-400"}`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              جديد
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "new" ? "bg-white/20 text-white" : "bg-green-200 text-green-700"}`}>{counts.isNew}</span>
+            </button>
+          )}
+
+          {/* تخفيض */}
+          {counts.sale > 0 && (
+            <button
+              onClick={() => setActiveFilter("sale")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "sale" ? "bg-pink-600 text-white border-pink-600" : "bg-pink-50 text-pink-700 border-pink-200 hover:border-pink-400"}`}
+            >
+              <BadgePercent className="w-3.5 h-3.5" />
+              تخفيض
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "sale" ? "bg-white/20 text-white" : "bg-pink-200 text-pink-700"}`}>{counts.sale}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Modal */}
@@ -293,7 +440,7 @@ export default function Products() {
                   <input
                     type="number" required
                     value={formData.price}
-                    onChange={e => setFormData({ ...formData, price: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, price: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   />
                 </div>
@@ -302,7 +449,7 @@ export default function Products() {
                   <input
                     type="number"
                     value={formData.original_price}
-                    onChange={e => setFormData({ ...formData, original_price: Number(e.target.value) })}
+                    onChange={e => setFormData({ ...formData, original_price: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                   />
                 </div>
@@ -323,7 +470,7 @@ export default function Products() {
                     <input
                       type="number" required
                       value={formData.stock}
-                      onChange={e => setFormData({ ...formData, stock: Number(e.target.value) })}
+                      onChange={e => setFormData({ ...formData, stock: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                     />
                   )}
@@ -498,14 +645,14 @@ export default function Products() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {products.length === 0 ? (
+              {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    لا توجد منتجات
+                    {searchQuery ? `لا توجد نتائج لـ "${searchQuery}"` : activeFilter === "all" ? "لا توجد منتجات" : "لا توجد منتجات في هذا التصنيف"}
                   </td>
                 </tr>
               ) : (
-                products.map((product) => {
+                filteredProducts.map((product) => {
                   let images: string[] = [];
                   try {
                     images = JSON.parse(product.image_url as string || "[]");

@@ -32,46 +32,34 @@ export default function Settings() {
       if (exists) {
         await db.execute({
           sql: `UPDATE store_config SET
-            store_name = ?,
-            logo_url = ?,
-            hero_images = ?,
             contact_phone = ?,
             contact_email = ?,
             contact_address = ?,
             facebook_url = ?,
             instagram_url = ?,
             twitter_url = ?,
-            whatsapp_number = ?,
             updated_at = datetime('now')`,
           args: [
-            config.store_name || "",
-            config.logo_url || "",
-            config.hero_images || "",
             config.contact_phone || "",
             config.contact_email || "",
             config.contact_address || "",
             config.facebook_url || "",
             config.instagram_url || "",
             config.twitter_url || "",
-            config.whatsapp_number || "",
           ],
         });
       } else {
         await db.execute({
           sql: `INSERT INTO store_config
-            (store_name, logo_url, hero_images, contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, whatsapp_number, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+            (contact_phone, contact_email, contact_address, facebook_url, instagram_url, twitter_url, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
           args: [
-            config.store_name || "",
-            config.logo_url || "",
-            config.hero_images || "",
             config.contact_phone || "",
             config.contact_email || "",
             config.contact_address || "",
             config.facebook_url || "",
             config.instagram_url || "",
             config.twitter_url || "",
-            config.whatsapp_number || "",
           ],
         });
       }
@@ -115,23 +103,12 @@ export default function Settings() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 space-y-8">
-        {/* Basic info */}
-        <div>
-          <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">معلومات المتجر</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {field("store_name", "اسم المتجر", "text", "Kace Gaming")}
-            {field("logo_url", "رابط الشعار", "text", "https://...", "ltr")}
-            {field("hero_images", "روابط صور الهيرو (مفصولة بفاصلة)", "text", "https://img1.jpg, https://img2.jpg", "ltr", 2)}
-          </div>
-        </div>
-
         {/* Contact */}
         <div>
           <h2 className="text-base font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">معلومات التواصل</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {field("contact_phone", "رقم الهاتف", "text", "0555555555", "ltr")}
             {field("contact_email", "البريد الإلكتروني", "email", "contact@example.com", "ltr")}
-            {field("whatsapp_number", "رقم واتساب", "text", "213555555555", "ltr")}
             {field("contact_address", "العنوان", "text", "الجزائر العاصمة...", undefined, 2)}
           </div>
         </div>

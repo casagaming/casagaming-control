@@ -120,29 +120,63 @@ export default function Layout() {
   usePusherOrders(handleNewOrder);
 
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [notifBlocked, setNotifBlocked] = useState(false);
+
+  const checkSubscription = () => {
+    try {
+      const opted = window.OneSignal?.User?.PushSubscription?.optedIn;
+      setIsSubscribed(Boolean(opted));
+    } catch {}
+  };
 
   useEffect(() => {
-    const check = () => {
-      if (window.OneSignal) {
-        window.OneSignal.User?.PushSubscription?.optedIn
-          ? setIsSubscribed(true)
-          : setIsSubscribed(false);
-      }
+    const timer = setTimeout(checkSubscription, 2000);
+
+    const onChange = () => checkSubscription();
+    try {
+      window.OneSignal?.User?.PushSubscription?.addEventListener?.('change', onChange);
+    } catch {}
+
+    return () => {
+      clearTimeout(timer);
+      try {
+        window.OneSignal?.User?.PushSubscription?.removeEventListener?.('change', onChange);
+      } catch {}
     };
-    const timer = setTimeout(check, 2000);
-    return () => clearTimeout(timer);
   }, []);
 
-  const requestPushSubscription = () => {
-    if (window.OneSignal) {
-      window.OneSignal.Slidedown?.promptPush?.().catch(() => {});
-    } else if (window.OneSignalDeferred) {
-      window.OneSignalDeferred.push(async (OneSignal: any) => {
+  const requestPushSubscription = async () => {
+    setIsRequesting(true);
+    const timeout = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
+    try {
+      const run = async (OneSignal: any) => {
         try {
-          await OneSignal.Slidedown.promptPush();
-          setIsSubscribed(true);
-        } catch {}
-      });
+          await Promise.race([OneSignal.Slidedown.promptPush(), timeout]);
+        } catch {
+          try {
+            await Promise.race([OneSignal.Notifications.requestPermission(), timeout]);
+          } catch {}
+        }
+        const opted = OneSignal.User?.PushSubscription?.optedIn;
+        setIsSubscribed(Boolean(opted));
+      };
+
+      if (window.OneSignal) {
+        await Promise.race([run(window.OneSignal), timeout]);
+      } else {
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        window.OneSignalDeferred.push(run);
+        await timeout;
+      }
+    } catch {
+      checkSubscription();
+      setNotifBlocked(true);
+      setTimeout(() => setNotifBlocked(false), 6000);
+    } finally {
+      setIsRequesting(false);
     }
   };
 
@@ -234,17 +268,25 @@ export default function Layout() {
         {/* Bottom Actions */}
         <div className="border-t border-slate-100 p-3 shrink-0">
           {!isSubscribed ? (
-            <button
-              onClick={requestPushSubscription}
-              title={!sidebarExpanded ? "تفعيل الإشعارات" : undefined}
-              className={cn(
-                "w-full flex items-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm shadow-indigo-200",
-                sidebarExpanded ? "gap-2 px-3 py-2.5" : "justify-center py-2.5"
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={requestPushSubscription}
+                disabled={isRequesting}
+                title={!sidebarExpanded ? "تفعيل الإشعارات" : undefined}
+                className={cn(
+                  "w-full flex items-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm shadow-indigo-200 disabled:opacity-60",
+                  sidebarExpanded ? "gap-2 px-3 py-2.5" : "justify-center py-2.5"
+                )}
+              >
+                <BellRing className={cn("w-4 h-4 shrink-0", isRequesting && "animate-pulse")} />
+                {sidebarExpanded && (isRequesting ? "جاري التفعيل..." : "تفعيل الإشعارات")}
+              </button>
+              {notifBlocked && sidebarExpanded && (
+                <p className="text-[10px] text-amber-600 leading-snug px-1 text-center">
+                  افتح التطبيق في متصفح خارج Replit لتفعيل الإشعارات
+                </p>
               )}
-            >
-              <BellRing className="w-4 h-4 shrink-0" />
-              {sidebarExpanded && "تفعيل الإشعارات"}
-            </button>
+            </div>
           ) : (
             <div
               title={!sidebarExpanded ? "الإشعارات مفعّلة ✓" : undefined}
