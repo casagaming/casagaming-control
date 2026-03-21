@@ -3,8 +3,12 @@ import { db } from "@/lib/db";
 import { Plus, X, Upload, Package, Image as ImageIcon, AlertTriangle, Tag, Star, Sparkles, BadgePercent, Search } from "lucide-react";
 import { uploadImage, deleteCloudinaryImage } from "@/lib/cloudinary";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useLanguage } from "@/lib/LanguageContext";
 
 export default function Products() {
+  const { t, lang } = useLanguage();
+  const currency = lang === "fr" ? "DZD" : "د.ج";
+
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -61,7 +65,7 @@ export default function Products() {
       setFormData(prev => ({ ...prev, image_url: [...prev.image_url, url] }));
     } catch (error) {
       console.error("Upload failed", error);
-      alert("فشل رفع الصورة");
+      alert(t.upload_failed);
     } finally {
       setIsUploading(false);
     }
@@ -69,18 +73,7 @@ export default function Products() {
 
   const openAddModal = () => {
     setEditingId(null);
-    setFormData({
-      name_ar: "",
-      description_ar: "",
-      price: "",
-      original_price: "",
-      stock: "",
-      category_id: "",
-      is_featured: false,
-      is_new: true,
-      is_sale: false,
-      image_url: [],
-    });
+    setFormData({ name_ar: "", description_ar: "", price: "", original_price: "", stock: "", category_id: "", is_featured: false, is_new: true, is_sale: false, image_url: [] });
     setVariants([]);
     setIsModalOpen(true);
   };
@@ -88,10 +81,7 @@ export default function Products() {
   const openEditModal = async (product: any) => {
     setEditingId(product.id as string);
     let images = [];
-    try {
-      images = JSON.parse(product.image_url as string || "[]");
-    } catch (e) {}
-
+    try { images = JSON.parse(product.image_url as string || "[]"); } catch (e) {}
     setFormData({
       name_ar: product.name_ar as string || "",
       description_ar: product.description_ar as string || "",
@@ -104,22 +94,10 @@ export default function Products() {
       is_sale: Boolean(product.is_sale),
       image_url: images,
     });
-
     try {
-      const res = await db.execute({
-        sql: "SELECT * FROM product_variants WHERE product_id = ?",
-        args: [product.id],
-      });
-      setVariants(res.rows.map(v => ({
-        id: v.id,
-        name_ar: v.name_ar,
-        stock: v.stock,
-        image_url: v.image_url,
-      })));
-    } catch (error) {
-      setVariants([]);
-    }
-
+      const res = await db.execute({ sql: "SELECT * FROM product_variants WHERE product_id = ?", args: [product.id] });
+      setVariants(res.rows.map(v => ({ id: v.id, name_ar: v.name_ar, stock: v.stock, image_url: v.image_url })));
+    } catch { setVariants([]); }
     setIsModalOpen(true);
   };
 
@@ -144,12 +122,8 @@ export default function Products() {
     try {
       setUploadingVariantIdx(index);
       const url = await uploadImage(e.target.files[0]);
-      updateVariant(index, 'image_url', url);
-    } catch (error) {
-      alert("فشل رفع الصورة");
-    } finally {
-      setUploadingVariantIdx(null);
-    }
+      updateVariant(index, "image_url", url);
+    } catch { alert(t.upload_failed); } finally { setUploadingVariantIdx(null); }
   };
 
   const variantsTotalStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
@@ -161,52 +135,18 @@ export default function Products() {
       const imagesStr = JSON.stringify(formData.image_url);
       const mainImageUrl = formData.image_url[0] || "";
       const finalStock = variants.length > 0 ? variantsTotalStock : Number(formData.stock) || 0;
-
       let productId = editingId;
 
       if (editingId) {
         await db.execute({
           sql: "UPDATE products SET name_ar = ?, name_en = ?, description_ar = ?, price = ?, original_price = ?, stock = ?, category_id = ?, is_featured = ?, is_new = ?, is_sale = ?, image_url = ?, images = ?, slug = ? WHERE id = ?",
-          args: [
-            formData.name_ar,
-            formData.name_ar,
-            formData.description_ar,
-            Number(formData.price) || 0,
-            Number(formData.original_price) || 0,
-            finalStock,
-            formData.category_id || null,
-            formData.is_featured ? 1 : 0,
-            formData.is_new ? 1 : 0,
-            formData.is_sale ? 1 : 0,
-            imagesStr,
-            imagesStr,
-            slug,
-            editingId,
-          ],
+          args: [formData.name_ar, formData.name_ar, formData.description_ar, Number(formData.price) || 0, Number(formData.original_price) || 0, finalStock, formData.category_id || null, formData.is_featured ? 1 : 0, formData.is_new ? 1 : 0, formData.is_sale ? 1 : 0, imagesStr, imagesStr, slug, editingId],
         });
-
-        await db.execute({
-          sql: "DELETE FROM product_variants WHERE product_id = ?",
-          args: [editingId],
-        });
+        await db.execute({ sql: "DELETE FROM product_variants WHERE product_id = ?", args: [editingId] });
       } else {
         const res = await db.execute({
           sql: "INSERT INTO products (name_ar, name_en, description_ar, price, original_price, stock, category_id, is_featured, is_new, is_sale, image_url, images, slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-          args: [
-            formData.name_ar,
-            formData.name_ar,
-            formData.description_ar,
-            Number(formData.price) || 0,
-            Number(formData.original_price) || 0,
-            finalStock,
-            formData.category_id || null,
-            formData.is_featured ? 1 : 0,
-            formData.is_new ? 1 : 0,
-            formData.is_sale ? 1 : 0,
-            imagesStr,
-            imagesStr,
-            slug,
-          ],
+          args: [formData.name_ar, formData.name_ar, formData.description_ar, Number(formData.price) || 0, Number(formData.original_price) || 0, finalStock, formData.category_id || null, formData.is_featured ? 1 : 0, formData.is_new ? 1 : 0, formData.is_sale ? 1 : 0, imagesStr, imagesStr, slug],
         });
         productId = res.rows[0].id as string;
       }
@@ -221,24 +161,13 @@ export default function Products() {
       }
 
       setIsModalOpen(false);
-      setFormData({
-        name_ar: "",
-        description_ar: "",
-        price: "",
-        original_price: "",
-        stock: "",
-        category_id: "",
-        is_featured: false,
-        is_new: true,
-        is_sale: false,
-        image_url: [],
-      });
+      setFormData({ name_ar: "", description_ar: "", price: "", original_price: "", stock: "", category_id: "", is_featured: false, is_new: true, is_sale: false, image_url: [] });
       setVariants([]);
       setEditingId(null);
       fetchProducts();
     } catch (error) {
       console.error("Failed to save product", error);
-      alert("فشل حفظ المنتج");
+      alert(t.save_failed_product);
     }
   };
 
@@ -269,23 +198,29 @@ export default function Products() {
     sale: products.filter(p => Boolean(p.is_sale)).length,
   }), [products]);
 
+  const noResultsMsg = searchQuery
+    ? (lang === "fr" ? `Aucun résultat pour "${searchQuery}"` : `لا توجد نتائج لـ "${searchQuery}"`)
+    : activeFilter === "all"
+      ? (lang === "fr" ? "Aucun produit" : "لا توجد منتجات")
+      : (lang === "fr" ? "Aucun produit dans cette catégorie" : "لا توجد منتجات في هذا التصنيف");
+
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative" dir={t.dir}>
       <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-900 ml-auto">إدارة المنتجات</h1>
+        <h1 className="text-2xl font-bold text-gray-900 ml-auto">{t.products_title}</h1>
         <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <Search className={`absolute ${t.dir === "rtl" ? "right-3" : "left-3"} top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none`} />
           <input
             type="text"
-            placeholder="ابحث عن منتج..."
+            placeholder={t.search_product}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="pr-9 pl-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-52"
+            className={`${t.dir === "rtl" ? "pr-9 pl-3" : "pl-9 pr-3"} py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-52`}
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className={`absolute ${t.dir === "rtl" ? "left-2" : "right-2"} top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600`}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -296,52 +231,45 @@ export default function Products() {
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
         >
           <Plus className="w-5 h-5" />
-          إضافة منتج
+          {t.add_product}
         </button>
       </div>
 
-      {/* Smart Filter Bar */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-wrap">
-
-          {/* الكل */}
           <button
             onClick={() => setActiveFilter("all")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "all" ? "bg-indigo-600 text-white border-indigo-600" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600"}`}
           >
             <Package className="w-3.5 h-3.5" />
-            الكل
+            {t.filter_all}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"}`}>{counts.all}</span>
           </button>
 
-          {/* نفد المخزون */}
           {counts.outOfStock > 0 && (
             <button
               onClick={() => setActiveFilter("out-of-stock")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "out-of-stock" ? "bg-red-600 text-white border-red-600" : "bg-red-50 text-red-700 border-red-200 hover:border-red-400"}`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              نفد المخزون
+              {t.out_of_stock}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "out-of-stock" ? "bg-white/20 text-white" : "bg-red-200 text-red-700"}`}>{counts.outOfStock}</span>
             </button>
           )}
 
-          {/* مخزون منخفض */}
           {counts.lowStock > 0 && (
             <button
               onClick={() => setActiveFilter("low-stock")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "low-stock" ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400"}`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              مخزون منخفض
+              {t.low_stock_filter}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "low-stock" ? "bg-white/20 text-white" : "bg-orange-200 text-orange-700"}`}>{counts.lowStock}</span>
             </button>
           )}
 
-          {/* فاصل */}
           {categories.length > 0 && <div className="w-px bg-gray-200 self-stretch mx-1" />}
 
-          {/* التصنيفات */}
           {categories.map(cat => {
             const catCount = products.filter(p => String(p.category_id) === String(cat.id)).length;
             if (catCount === 0) return null;
@@ -359,62 +287,47 @@ export default function Products() {
             );
           })}
 
-          {/* فاصل */}
           <div className="w-px bg-gray-200 self-stretch mx-1" />
 
-          {/* مميز */}
           {counts.featured > 0 && (
-            <button
-              onClick={() => setActiveFilter("featured")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "featured" ? "bg-yellow-500 text-white border-yellow-500" : "bg-yellow-50 text-yellow-700 border-yellow-200 hover:border-yellow-400"}`}
-            >
+            <button onClick={() => setActiveFilter("featured")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "featured" ? "bg-yellow-500 text-white border-yellow-500" : "bg-yellow-50 text-yellow-700 border-yellow-200 hover:border-yellow-400"}`}>
               <Star className="w-3.5 h-3.5" />
-              مميز
+              {t.featured}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "featured" ? "bg-white/20 text-white" : "bg-yellow-200 text-yellow-700"}`}>{counts.featured}</span>
             </button>
           )}
 
-          {/* جديد */}
           {counts.isNew > 0 && (
-            <button
-              onClick={() => setActiveFilter("new")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "new" ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-200 hover:border-green-400"}`}
-            >
+            <button onClick={() => setActiveFilter("new")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "new" ? "bg-green-600 text-white border-green-600" : "bg-green-50 text-green-700 border-green-200 hover:border-green-400"}`}>
               <Sparkles className="w-3.5 h-3.5" />
-              جديد
+              {t.new_label}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "new" ? "bg-white/20 text-white" : "bg-green-200 text-green-700"}`}>{counts.isNew}</span>
             </button>
           )}
 
-          {/* تخفيض */}
           {counts.sale > 0 && (
-            <button
-              onClick={() => setActiveFilter("sale")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "sale" ? "bg-pink-600 text-white border-pink-600" : "bg-pink-50 text-pink-700 border-pink-200 hover:border-pink-400"}`}
-            >
+            <button onClick={() => setActiveFilter("sale")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${activeFilter === "sale" ? "bg-pink-600 text-white border-pink-600" : "bg-pink-50 text-pink-700 border-pink-200 hover:border-pink-400"}`}>
               <BadgePercent className="w-3.5 h-3.5" />
-              تخفيض
+              {t.sale}
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeFilter === "sale" ? "bg-white/20 text-white" : "bg-pink-200 text-pink-700"}`}>{counts.sale}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[90vh]">
             <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <h2 className="text-lg font-bold text-gray-900">{editingId ? "تعديل منتج" : "إضافة منتج جديد"}</h2>
+              <h2 className="text-lg font-bold text-gray-900">{editingId ? t.edit_product : t.add_new_product}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {/* Name */}
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">اسم المنتج</label>
+                <label className="text-sm font-medium text-gray-700">{t.product_name}</label>
                 <input
                   required
                   value={formData.name_ar}
@@ -423,9 +336,8 @@ export default function Products() {
                 />
               </div>
 
-              {/* Description */}
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">الوصف</label>
+                <label className="text-sm font-medium text-gray-700">{t.description}</label>
                 <textarea
                   value={formData.description_ar}
                   onChange={e => setFormData({ ...formData, description_ar: e.target.value })}
@@ -433,10 +345,9 @@ export default function Products() {
                 />
               </div>
 
-              {/* Price row */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">السعر (د.ج)</label>
+                  <label className="text-sm font-medium text-gray-700">{t.price}</label>
                   <input
                     type="number" required
                     value={formData.price}
@@ -445,7 +356,7 @@ export default function Products() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">السعر الأصلي (د.ج)</label>
+                  <label className="text-sm font-medium text-gray-700">{t.original_price}</label>
                   <input
                     type="number"
                     value={formData.original_price}
@@ -455,16 +366,15 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Stock + Category row */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-gray-700">
-                    المخزون
-                    {variants.length > 0 && <span className="text-xs text-indigo-500 mr-1">(محسوب)</span>}
+                    {t.stock}
+                    {variants.length > 0 && <span className="text-xs text-indigo-500 mr-1">{t.calculated}</span>}
                   </label>
                   {variants.length > 0 ? (
                     <div className="w-full px-3 py-2 border border-indigo-200 bg-indigo-50 rounded-xl text-sm text-indigo-700 font-medium">
-                      {variantsTotalStock} قطعة
+                      {variantsTotalStock} {t.pieces}
                     </div>
                   ) : (
                     <input
@@ -476,13 +386,13 @@ export default function Products() {
                   )}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">التصنيف</label>
+                  <label className="text-sm font-medium text-gray-700">{t.category}</label>
                   <select
                     value={formData.category_id}
                     onChange={e => setFormData({ ...formData, category_id: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"
                   >
-                    <option value="">بدون تصنيف</option>
+                    <option value="">{t.no_category}</option>
                     {categories.map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name_ar}</option>
                     ))}
@@ -490,12 +400,11 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Checkboxes */}
               <div className="flex gap-4">
                 {[
-                  { key: "is_featured", label: "مميز" },
-                  { key: "is_new", label: "جديد" },
-                  { key: "is_sale", label: "تخفيض" },
+                  { key: "is_featured", label: t.featured },
+                  { key: "is_new",      label: t.new_label },
+                  { key: "is_sale",     label: t.sale },
                 ].map(({ key, label }) => (
                   <label key={key} className="flex items-center gap-1.5 cursor-pointer">
                     <input
@@ -509,9 +418,8 @@ export default function Products() {
                 ))}
               </div>
 
-              {/* Images */}
               <div className="space-y-1">
-                <label className="text-sm font-medium text-gray-700">الصور</label>
+                <label className="text-sm font-medium text-gray-700">{t.images}</label>
                 <div className="flex flex-wrap gap-2">
                   {formData.image_url.map((url, i) => (
                     <div key={i} className="relative group">
@@ -532,14 +440,10 @@ export default function Products() {
                 </div>
               </div>
 
-              {/* Variants */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900">الأنواع</h3>
-                    {variants.length > 0 && (
-                      <p className="text-xs text-indigo-500">المخزون الإجمالي يُحسب تلقائياً من مجموع الأنواع</p>
-                    )}
+                    <h3 className="text-sm font-bold text-gray-900">{t.variants}</h3>
                   </div>
                   <button
                     type="button"
@@ -547,24 +451,20 @@ export default function Products() {
                     className="text-xs flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-200 transition-colors font-medium"
                   >
                     <Plus className="w-3 h-3" />
-                    إضافة نوع
+                    {t.add_variant}
                   </button>
                 </div>
 
                 {variants.map((variant, index) => (
                   <div key={variant.id} className="bg-gray-50 p-2.5 rounded-xl border border-gray-100 space-y-2">
                     <div className="flex items-center gap-2">
-                      {/* Image */}
                       <div className="shrink-0">
                         {variant.image_url ? (
                           <div className="relative group">
-                            <img
-                              src={variant.image_url}
-                              className="w-10 h-10 rounded-lg object-cover border border-gray-200"
-                            />
+                            <img src={variant.image_url} className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
                             <button
                               type="button"
-                              onClick={() => updateVariant(index, 'image_url', '')}
+                              onClick={() => updateVariant(index, "image_url", "")}
                               className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <X className="w-2.5 h-2.5" />
@@ -572,44 +472,25 @@ export default function Products() {
                           </div>
                         ) : (
                           <label className="w-10 h-10 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:bg-gray-100 cursor-pointer transition-colors">
-                            {uploadingVariantIdx === index
-                              ? <span className="text-xs">...</span>
-                              : <ImageIcon className="w-4 h-4" />
-                            }
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept="image/*"
-                              onChange={e => handleVariantImageUpload(e, index)}
-                              disabled={uploadingVariantIdx !== null}
-                            />
+                            {uploadingVariantIdx === index ? <span className="text-xs">...</span> : <ImageIcon className="w-4 h-4" />}
+                            <input type="file" className="hidden" accept="image/*" onChange={e => handleVariantImageUpload(e, index)} disabled={uploadingVariantIdx !== null} />
                           </label>
                         )}
                       </div>
-
-                      {/* Name */}
                       <input
-                        placeholder="اسم النوع"
+                        placeholder={t.variant_name}
                         value={variant.name_ar}
-                        onChange={e => updateVariant(index, 'name_ar', e.target.value)}
+                        onChange={e => updateVariant(index, "name_ar", e.target.value)}
                         className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                       />
-
-                      {/* Stock */}
                       <input
                         type="number"
-                        placeholder="كمية"
+                        placeholder={t.variant_stock}
                         value={variant.stock}
-                        onChange={e => updateVariant(index, 'stock', Number(e.target.value))}
+                        onChange={e => updateVariant(index, "stock", Number(e.target.value))}
                         className="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                       />
-
-                      {/* Remove */}
-                      <button
-                        type="button"
-                        onClick={() => removeVariant(index)}
-                        className="text-red-400 hover:text-red-600 p-1 shrink-0"
-                      >
+                      <button type="button" onClick={() => removeVariant(index)} className="text-red-400 hover:text-red-600 p-1 shrink-0">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -619,10 +500,10 @@ export default function Products() {
 
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors text-sm">
-                  إلغاء
+                  {t.cancel}
                 </button>
                 <button type="submit" disabled={isUploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 text-sm">
-                  {editingId ? "حفظ التعديلات" : "حفظ المنتج"}
+                  {editingId ? t.save_changes : t.save_product}
                 </button>
               </div>
             </form>
@@ -632,31 +513,29 @@ export default function Products() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-right">
+          <table className="w-full text-sm" style={{ textAlign: t.dir === "rtl" ? "right" : "left" }}>
             <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
               <tr>
-                <th className="px-6 py-4">الصورة</th>
-                <th className="px-6 py-4">الاسم</th>
-                <th className="px-6 py-4">التصنيف</th>
-                <th className="px-6 py-4">السعر</th>
-                <th className="px-6 py-4">المخزون</th>
-                <th className="px-6 py-4">الحالة</th>
-                <th className="px-6 py-4">إجراءات</th>
+                <th className="px-6 py-4">{t.col_image}</th>
+                <th className="px-6 py-4">{t.col_name}</th>
+                <th className="px-6 py-4">{t.category}</th>
+                <th className="px-6 py-4">{t.price}</th>
+                <th className="px-6 py-4">{t.stock}</th>
+                <th className="px-6 py-4">{lang === "fr" ? "Statut" : "الحالة"}</th>
+                <th className="px-6 py-4">{t.col_actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                    {searchQuery ? `لا توجد نتائج لـ "${searchQuery}"` : activeFilter === "all" ? "لا توجد منتجات" : "لا توجد منتجات في هذا التصنيف"}
+                    {noResultsMsg}
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => {
                   let images: string[] = [];
-                  try {
-                    images = JSON.parse(product.image_url as string || "[]");
-                  } catch (e) {}
+                  try { images = JSON.parse(product.image_url as string || "[]"); } catch (e) {}
                   const category = categories.find(c => c.id === product.category_id);
                   return (
                     <tr key={product.id as number} className="hover:bg-gray-50/50">
@@ -670,32 +549,26 @@ export default function Products() {
                         )}
                       </td>
                       <td className="px-6 py-4 font-medium">{product.name_ar}</td>
-                      <td className="px-6 py-4 text-gray-500">{category ? category.name_ar : '-'}</td>
-                      <td className="px-6 py-4">{product.price} د.ج</td>
+                      <td className="px-6 py-4 text-gray-500">{category ? category.name_ar : "-"}</td>
+                      <td className="px-6 py-4">{product.price} {currency}</td>
                       <td className="px-6 py-4">
-                        <span className={`font-medium ${Number(product.stock) === 0 ? 'text-red-500' : Number(product.stock) < 5 ? 'text-orange-500' : 'text-gray-900'}`}>
+                        <span className={`font-medium ${Number(product.stock) === 0 ? "text-red-500" : Number(product.stock) < 5 ? "text-orange-500" : "text-gray-900"}`}>
                           {product.stock}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         {product.is_sale ? (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">تخفيض</span>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">{t.sale}</span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">عادي</span>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">{lang === "fr" ? "Normal" : "عادي"}</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="text-indigo-600 hover:text-indigo-900 font-medium ml-3"
-                        >
-                          تعديل
+                        <button onClick={() => openEditModal(product)} className="text-indigo-600 hover:text-indigo-900 font-medium ml-3">
+                          {t.edit}
                         </button>
-                        <button
-                          onClick={() => { setDeleteTargetId(product.id as string); setConfirmOpen(true); }}
-                          className="text-red-600 hover:text-red-900 font-medium"
-                        >
-                          حذف
+                        <button onClick={() => { setDeleteTargetId(product.id as string); setConfirmOpen(true); }} className="text-red-600 hover:text-red-900 font-medium">
+                          {t.delete}
                         </button>
                       </td>
                     </tr>
@@ -709,8 +582,8 @@ export default function Products() {
 
       <ConfirmModal
         isOpen={confirmOpen}
-        title="حذف المنتج"
-        message="هل أنت متأكد من حذف هذا المنتج؟ سيتم حذف جميع بياناته ولا يمكن التراجع."
+        title={lang === "fr" ? "Supprimer le produit" : "حذف المنتج"}
+        message={lang === "fr" ? "Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible." : "هل أنت متأكد من حذف هذا المنتج؟ سيتم حذف جميع بياناته ولا يمكن التراجع."}
         onConfirm={async () => {
           if (!deleteTargetId) return;
           try {
@@ -719,23 +592,16 @@ export default function Products() {
             if (target) {
               let imgs: string[] = [];
               try { imgs = JSON.parse(target.images || target.image_url || "[]"); } catch {}
-              for (const url of imgs) {
-                await deleteCloudinaryImage(url);
-              }
-              const variants = await db.execute({
-                sql: "SELECT image_url FROM product_variants WHERE product_id = ? AND image_url != ''",
-                args: [deleteTargetId],
-              });
-              for (const v of variants.rows) {
-                if (v.image_url) await deleteCloudinaryImage(v.image_url as string);
-              }
+              for (const url of imgs) { await deleteCloudinaryImage(url); }
+              const variantsRes = await db.execute({ sql: "SELECT image_url FROM product_variants WHERE product_id = ? AND image_url != ''", args: [deleteTargetId] });
+              for (const v of variantsRes.rows) { if (v.image_url) await deleteCloudinaryImage(v.image_url as string); }
             }
             await db.execute({ sql: "DELETE FROM product_variants WHERE product_id = ?", args: [deleteTargetId] });
             await db.execute({ sql: "DELETE FROM products WHERE id = ?", args: [deleteTargetId] });
             fetchProducts();
             setConfirmOpen(false);
           } catch {
-            alert("فشل حذف المنتج");
+            alert(lang === "fr" ? "Échec de la suppression du produit" : "فشل حذف المنتج");
           } finally {
             setIsDeleting(false);
             setDeleteTargetId(null);

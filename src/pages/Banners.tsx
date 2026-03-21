@@ -3,8 +3,10 @@ import { db } from "@/lib/db";
 import { Plus, X, Upload, Image } from "lucide-react";
 import { uploadImage, deleteCloudinaryImage } from "@/lib/cloudinary";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useLanguage } from "@/lib/LanguageContext";
 
 export default function Banners() {
+  const { t } = useLanguage();
   const [banners, setBanners] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -14,9 +16,7 @@ export default function Banners() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetchBanners();
-  }, []);
+  useEffect(() => { fetchBanners(); }, []);
 
   async function fetchBanners() {
     try {
@@ -35,7 +35,7 @@ export default function Banners() {
       setImageUrl(url);
     } catch (error) {
       console.error("Upload failed", error);
-      alert("فشل رفع الصورة");
+      alert(t.upload_failed);
     } finally {
       setIsUploading(false);
     }
@@ -56,7 +56,7 @@ export default function Banners() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!imageUrl) {
-      alert("الرجاء رفع صورة أولاً");
+      alert(t.please_upload_image);
       return;
     }
     try {
@@ -79,36 +79,35 @@ export default function Banners() {
       fetchBanners();
     } catch (error) {
       console.error("Failed to save banner", error);
-      alert("فشل حفظ البانر");
+      alert(t.save_failed_banner);
     }
   };
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 relative" dir={t.dir}>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">إدارة البانرات</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t.banners_title}</h1>
         <button
           onClick={openAddModal}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
         >
           <Plus className="w-5 h-5" />
-          إضافة بانر
+          {t.add_banner}
         </button>
       </div>
 
-      {/* Modal - image only */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900">{editingId ? "تعديل بانر" : "إضافة بانر جديد"}</h2>
+              <h2 className="text-lg font-bold text-gray-900">{editingId ? t.edit_banner : t.add_new_banner}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">صورة البانر</label>
+                <label className="text-sm font-medium text-gray-700">{t.banner_image}</label>
                 {imageUrl ? (
                   <div className="relative group">
                     <img src={imageUrl} className="w-full h-40 rounded-xl object-cover border border-gray-200" />
@@ -123,11 +122,11 @@ export default function Banners() {
                 ) : (
                   <label className="w-full h-40 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors gap-2">
                     {isUploading ? (
-                      <span className="text-sm">جاري الرفع...</span>
+                      <span className="text-sm">{t.uploading}</span>
                     ) : (
                       <>
                         <Upload className="w-8 h-8" />
-                        <span className="text-sm">اضغط لرفع الصورة</span>
+                        <span className="text-sm">{t.click_to_upload}</span>
                       </>
                     )}
                     <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
@@ -137,10 +136,10 @@ export default function Banners() {
 
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors text-sm">
-                  إلغاء
+                  {t.cancel}
                 </button>
                 <button type="submit" disabled={isUploading || !imageUrl} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 text-sm">
-                  {editingId ? "حفظ التعديلات" : "حفظ البانر"}
+                  {editingId ? t.save_changes : t.save_banner}
                 </button>
               </div>
             </form>
@@ -151,7 +150,7 @@ export default function Banners() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {banners.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center text-gray-500">
-            لا توجد بانرات
+            {t.no_banners}
           </div>
         ) : (
           banners.map((banner) => (
@@ -159,7 +158,7 @@ export default function Banners() {
               {banner.image_url ? (
                 <img
                   src={banner.image_url as string}
-                  alt="بانر"
+                  alt="banner"
                   className="w-full h-40 object-cover"
                 />
               ) : (
@@ -168,19 +167,19 @@ export default function Banners() {
                 </div>
               )}
               <div className="p-3 flex justify-between items-center">
-                <span className="text-xs text-gray-400">بانر #{banner.id}</span>
+                <span className="text-xs text-gray-400">#{banner.id}</span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => openEditModal(banner)}
                     className="text-xs text-indigo-600 hover:text-indigo-900 font-medium"
                   >
-                    تعديل
+                    {t.edit}
                   </button>
                   <button
                     onClick={() => { setDeleteTargetId(banner.id as number); setConfirmOpen(true); }}
                     className="text-xs text-red-600 hover:text-red-900 font-medium"
                   >
-                    حذف
+                    {t.delete}
                   </button>
                 </div>
               </div>
@@ -191,8 +190,8 @@ export default function Banners() {
 
       <ConfirmModal
         isOpen={confirmOpen}
-        title="حذف البانر"
-        message="هل أنت متأكد من حذف هذا البانر؟ لا يمكن التراجع عن هذا الإجراء."
+        title={t.delete_banner_title}
+        message={t.delete_banner_msg}
         onConfirm={async () => {
           if (!deleteTargetId) return;
           try {
@@ -205,7 +204,7 @@ export default function Banners() {
             fetchBanners();
             setConfirmOpen(false);
           } catch {
-            alert("فشل حذف البانر");
+            alert(t.delete_failed_banner);
           } finally {
             setIsDeleting(false);
             setDeleteTargetId(null);

@@ -24,16 +24,7 @@ declare global {
 }
 import { cn } from "@/lib/utils";
 import { useNewOrders, usePusherOrders } from "@/lib/useNewOrders";
-
-const navItems = [
-  { icon: LayoutDashboard, path: "/",          label: "الرئيسية" },
-  { icon: ShoppingCart,    path: "/orders",     label: "الطلبات", isOrders: true },
-  { icon: Package,         path: "/products",   label: "المنتجات" },
-  { icon: Tags,            path: "/categories", label: "الأصناف" },
-  { icon: ImageIcon,       path: "/banners",    label: "البنرات" },
-  { icon: Truck,           path: "/shipping",   label: "الشحن" },
-  { icon: Settings,        path: "/settings",   label: "الإعدادات" },
-];
+import { useLanguage } from "@/lib/LanguageContext";
 
 interface Toast {
   id: number;
@@ -47,6 +38,7 @@ const NOTIFICATION_SOUND = "https://res.cloudinary.com/ddsikz7wq/video/upload/v1
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t, lang, toggleLang } = useLanguage();
   const { newCount, markAsSeen } = useNewOrders();
   const [localNewCount, setLocalNewCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -57,6 +49,16 @@ export default function Layout() {
   const toastCounter = useRef(0);
   const audioUnlocked = useRef(false);
   const notifAudio = useRef<HTMLAudioElement | null>(null);
+
+  const navItems = [
+    { icon: LayoutDashboard, path: "/",          label: t.nav_home },
+    { icon: ShoppingCart,    path: "/orders",     label: t.nav_orders, isOrders: true },
+    { icon: Package,         path: "/products",   label: t.nav_products },
+    { icon: Tags,            path: "/categories", label: t.nav_categories },
+    { icon: ImageIcon,       path: "/banners",    label: t.nav_banners },
+    { icon: Truck,           path: "/shipping",   label: t.nav_shipping },
+    { icon: Settings,        path: "/settings",   label: t.nav_settings },
+  ];
 
   useEffect(() => {
     const audio = new Audio(NOTIFICATION_SOUND);
@@ -100,12 +102,12 @@ export default function Layout() {
     const id = ++toastCounter.current;
     setToasts(prev => [...prev, {
       id,
-      customer: data.customer_name || 'زبون',
-      orderId: data.id || '—',
+      customer: data.customer_name || (lang === "fr" ? "Client" : "زبون"),
+      orderId: data.id || "—",
       total: data.total_price || 0,
     }]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+      setToasts(prev => prev.filter(tt => tt.id !== id));
     }, 6000);
 
     try {
@@ -115,7 +117,7 @@ export default function Layout() {
         notifAudio.current.play().catch(() => {});
       }
     } catch {}
-  }, []);
+  }, [lang]);
 
   usePusherOrders(handleNewOrder);
 
@@ -132,16 +134,14 @@ export default function Layout() {
 
   useEffect(() => {
     const timer = setTimeout(checkSubscription, 2000);
-
     const onChange = () => checkSubscription();
     try {
-      window.OneSignal?.User?.PushSubscription?.addEventListener?.('change', onChange);
+      window.OneSignal?.User?.PushSubscription?.addEventListener?.("change", onChange);
     } catch {}
-
     return () => {
       clearTimeout(timer);
       try {
-        window.OneSignal?.User?.PushSubscription?.removeEventListener?.('change', onChange);
+        window.OneSignal?.User?.PushSubscription?.removeEventListener?.("change", onChange);
       } catch {}
     };
   }, []);
@@ -149,7 +149,7 @@ export default function Layout() {
   const requestPushSubscription = async () => {
     setIsRequesting(true);
     const timeout = new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 8000)
+      setTimeout(() => reject(new Error("timeout")), 8000)
     );
     try {
       const run = async (OneSignal: any) => {
@@ -163,7 +163,6 @@ export default function Layout() {
         const opted = OneSignal.User?.PushSubscription?.optedIn;
         setIsSubscribed(Boolean(opted));
       };
-
       if (window.OneSignal) {
         await Promise.race([run(window.OneSignal), timeout]);
       } else {
@@ -181,13 +180,14 @@ export default function Layout() {
   };
 
   const dismissToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+    setToasts(prev => prev.filter(tt => tt.id !== id));
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex" dir="rtl">
+  const currentNavLabel = navItems.find(n => n.path === location.pathname)?.label || t.dashboard_title;
 
-      {/* Mobile overlay */}
+  return (
+    <div className="min-h-screen bg-slate-50 flex" dir={t.dir}>
+
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-40 lg:hidden"
@@ -195,13 +195,16 @@ export default function Layout() {
         />
       )}
 
-      {/* Sidebar */}
       <aside className={cn(
-        "fixed top-0 right-0 h-full z-50 flex flex-col bg-white border-l border-slate-100 shadow-xl transition-all duration-300",
+        "fixed top-0 h-full z-50 flex flex-col bg-white border-slate-100 shadow-xl transition-all duration-300",
+        t.dir === "rtl" ? "right-0 border-l" : "left-0 border-r",
         sidebarExpanded ? "w-56" : "w-16",
-        sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+        sidebarOpen
+          ? "translate-x-0"
+          : t.dir === "rtl"
+            ? "translate-x-full lg:translate-x-0"
+            : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Logo */}
         <div className={cn(
           "flex items-center h-16 border-b border-slate-100 shrink-0 px-4",
           sidebarExpanded ? "justify-between" : "justify-center"
@@ -213,7 +216,10 @@ export default function Layout() {
             onClick={() => setSidebarExpanded(p => !p)}
             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors hidden lg:flex"
           >
-            {sidebarExpanded ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            {sidebarExpanded
+              ? (t.dir === "rtl" ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />)
+              : (t.dir === "rtl" ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)
+            }
           </button>
           <button
             onClick={() => setSidebarOpen(false)}
@@ -223,7 +229,6 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Nav Items */}
         <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
           {navItems.map(({ icon: Icon, path, label, isOrders }) => {
             const isActive = location.pathname === path;
@@ -245,10 +250,8 @@ export default function Layout() {
                 <div className="relative shrink-0">
                   <Icon className="w-5 h-5" />
                   {showBadge && (
-                    <span className={cn(
-                      "absolute -top-2 -left-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-black text-white bg-red-500 border-2 border-white px-1 animate-bounce"
-                    )}>
-                      {localNewCount > 99 ? '99+' : localNewCount}
+                    <span className="absolute -top-2 -left-2 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-black text-white bg-red-500 border-2 border-white px-1 animate-bounce">
+                      {localNewCount > 99 ? "99+" : localNewCount}
                     </span>
                   )}
                 </div>
@@ -256,8 +259,8 @@ export default function Layout() {
                   <span className="text-sm font-medium">{label}</span>
                 )}
                 {sidebarExpanded && showBadge && (
-                  <span className="mr-auto text-xs font-black bg-red-500 text-white rounded-full px-2 py-0.5 min-w-[22px] text-center">
-                    {localNewCount > 99 ? '99+' : localNewCount}
+                  <span className={cn("text-xs font-black bg-red-500 text-white rounded-full px-2 py-0.5 min-w-[22px] text-center", t.dir === "rtl" ? "mr-auto" : "ml-auto")}>
+                    {localNewCount > 99 ? "99+" : localNewCount}
                   </span>
                 )}
               </Link>
@@ -265,49 +268,48 @@ export default function Layout() {
           })}
         </nav>
 
-        {/* Bottom Actions */}
         <div className="border-t border-slate-100 p-3 shrink-0">
           {!isSubscribed ? (
             <div className="flex flex-col gap-1">
               <button
                 onClick={requestPushSubscription}
                 disabled={isRequesting}
-                title={!sidebarExpanded ? "تفعيل الإشعارات" : undefined}
+                title={!sidebarExpanded ? t.enable_notifs : undefined}
                 className={cn(
                   "w-full flex items-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-xs font-bold shadow-sm shadow-indigo-200 disabled:opacity-60",
                   sidebarExpanded ? "gap-2 px-3 py-2.5" : "justify-center py-2.5"
                 )}
               >
                 <BellRing className={cn("w-4 h-4 shrink-0", isRequesting && "animate-pulse")} />
-                {sidebarExpanded && (isRequesting ? "جاري التفعيل..." : "تفعيل الإشعارات")}
+                {sidebarExpanded && (isRequesting ? t.enabling : t.enable_notifs)}
               </button>
               {notifBlocked && sidebarExpanded && (
                 <p className="text-[10px] text-amber-600 leading-snug px-1 text-center">
-                  فشل تفعيل الإشعارات، تأكد من السماح بالإشعارات في المتصفح
+                  {t.notifs_blocked}
                 </p>
               )}
             </div>
           ) : (
             <div
-              title={!sidebarExpanded ? "الإشعارات مفعّلة ✓" : undefined}
+              title={!sidebarExpanded ? t.notifs_enabled : undefined}
               className={cn(
                 "w-full flex items-center rounded-xl bg-green-50 text-green-700 border border-green-200 text-xs font-bold",
                 sidebarExpanded ? "gap-2 px-3 py-2.5" : "justify-center py-2.5"
               )}
             >
               <BellRing className="w-4 h-4 shrink-0" />
-              {sidebarExpanded && "الإشعارات مفعّلة ✓"}
+              {sidebarExpanded && t.notifs_enabled}
             </div>
           )}
         </div>
       </aside>
 
-      {/* Main content area */}
       <div className={cn(
         "flex-1 flex flex-col min-w-0 transition-all duration-300",
-        sidebarExpanded ? "lg:mr-56" : "lg:mr-16"
+        sidebarExpanded
+          ? (t.dir === "rtl" ? "lg:mr-56" : "lg:ml-56")
+          : (t.dir === "rtl" ? "lg:mr-16" : "lg:ml-16")
       )}>
-        {/* Top Header */}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 shadow-sm h-16 flex items-center px-4 sm:px-6 gap-3 justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -317,24 +319,31 @@ export default function Layout() {
               <Menu className="w-5 h-5" />
             </button>
             <div className="hidden sm:block">
-              <p className="text-xs text-slate-400">
-                {navItems.find(n => n.path === location.pathname)?.label || 'لوحة التحكم'}
-              </p>
+              <p className="text-xs text-slate-400">{currentNavLabel}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {localNewCount > 0 && (
               <button
-                onClick={() => navigate('/orders')}
+                onClick={() => navigate("/orders")}
                 className="flex items-center gap-2 bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-red-100 transition-all animate-pulse"
               >
                 <ShoppingCart className="w-3.5 h-3.5" />
-                {localNewCount} طلب جديد
+                {t.new_orders_btn(localNewCount)}
               </button>
             )}
 
-            {/* Notifications Bell */}
+            {/* Language Toggle */}
+            <button
+              onClick={toggleLang}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 text-slate-600 text-xs font-bold transition-all"
+              title={lang === "fr" ? "التبديل إلى العربية" : "Passer en français"}
+            >
+              <span className="text-base leading-none">{lang === "fr" ? "🇩🇿" : "🇫🇷"}</span>
+              {lang === "fr" ? "العربية" : "Français"}
+            </button>
+
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -347,13 +356,16 @@ export default function Layout() {
               </button>
 
               {showNotifications && (
-                <div className="absolute left-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50">
+                <div className={cn(
+                  "absolute mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50",
+                  t.dir === "rtl" ? "left-0" : "right-0"
+                )}>
                   <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900">الإشعارات</h3>
+                    <h3 className="font-bold text-slate-900">{t.notifications}</h3>
                     <div className="flex items-center gap-2">
                       {notifications.length > 0 && (
                         <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full font-bold">
-                          {notifications.length} جديد
+                          {notifications.length} {t.new_notif_label}
                         </span>
                       )}
                       <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-slate-600">
@@ -365,22 +377,22 @@ export default function Layout() {
                     {notifications.length === 0 ? (
                       <div className="p-8 text-center text-slate-400 text-sm">
                         <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                        لا توجد إشعارات جديدة
+                        {t.no_notifications}
                       </div>
                     ) : (
                       <div className="divide-y divide-slate-50">
                         {notifications.map((notif, i) => (
                           <div
                             key={i}
-                            onClick={() => { navigate('/orders'); setShowNotifications(false); }}
+                            onClick={() => { navigate("/orders"); setShowNotifications(false); }}
                             className="p-4 hover:bg-slate-50 transition-colors cursor-pointer flex items-start gap-3"
                           >
                             <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
                               <ShoppingCart className="w-4 h-4 text-green-600" />
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">طلب جديد #{notif.id || '—'}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">من: {notif.customer_name || 'زبون'}</p>
+                              <p className="text-sm font-semibold text-slate-900">{t.new_order_notif_title} #{notif.id || "—"}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{t.new_order_notif_from} {notif.customer_name || (lang === "fr" ? "Client" : "زبون")}</p>
                             </div>
                           </div>
                         ))}
@@ -393,14 +405,12 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
 
-      {/* Toast Notifications */}
-      <div className="fixed bottom-6 left-6 z-[100] flex flex-col gap-3" dir="rtl">
+      <div className={cn("fixed bottom-6 z-[100] flex flex-col gap-3", t.dir === "rtl" ? "left-6" : "right-6")} dir={t.dir}>
         {toasts.map(toast => (
           <div
             key={toast.id}
@@ -410,16 +420,16 @@ export default function Layout() {
               <ShoppingCart className="w-5 h-5 text-green-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-900">🛒 طلب جديد!</p>
-              <p className="text-xs text-slate-500 mt-0.5 truncate">من: {toast.customer}</p>
+              <p className="text-sm font-bold text-slate-900">{t.new_order_toast_title}</p>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">{t.new_order_toast_from} {toast.customer}</p>
               {toast.total > 0 && (
-                <p className="text-xs font-bold text-indigo-600 mt-1">{toast.total} د.ج</p>
+                <p className="text-xs font-bold text-indigo-600 mt-1">{toast.total} {lang === "fr" ? "DZD" : "د.ج"}</p>
               )}
               <button
-                onClick={() => { navigate('/orders'); dismissToast(toast.id); }}
+                onClick={() => { navigate("/orders"); dismissToast(toast.id); }}
                 className="mt-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
               >
-                عرض الطلب <ChevronLeft className="w-3 h-3" />
+                {t.view_order} <ChevronLeft className="w-3 h-3" />
               </button>
             </div>
             <button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "@/lib/db";
+import { useLanguage } from "@/lib/LanguageContext";
 import {
   ShoppingCart,
   DollarSign,
@@ -8,22 +9,25 @@ import {
   Tags,
   Clock,
   ArrowLeft,
+  ArrowRight,
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
 
-const STATUS_BADGE: Record<string, { label: string; color: string }> = {
-  pending:    { label: "قيد الانتظار", color: "bg-amber-100 text-amber-700" },
-  processing: { label: "قيد التجهيز",  color: "bg-blue-100 text-blue-700" },
-  shipped:    { label: "تم الشحن",      color: "bg-purple-100 text-purple-700" },
-  delivered:  { label: "تم التوصيل",   color: "bg-green-100 text-green-700" },
-  cancelled:  { label: "ملغى",          color: "bg-red-100 text-red-700" },
-};
-
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { t, lang } = useLanguage();
+
+  const STATUS_BADGE: Record<string, { label: string; color: string }> = {
+    pending:    { label: t.status_pending,    color: "bg-amber-100 text-amber-700" },
+    processing: { label: t.status_processing, color: "bg-blue-100 text-blue-700" },
+    shipped:    { label: t.status_shipped,    color: "bg-purple-100 text-purple-700" },
+    delivered:  { label: t.status_delivered,  color: "bg-green-100 text-green-700" },
+    cancelled:  { label: t.status_cancelled,  color: "bg-red-100 text-red-700" },
+  };
+
   const [stats, setStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -81,113 +85,108 @@ export default function Dashboard() {
   }, []);
 
   const urgentCount = stats.pendingOrders + stats.processingOrders;
+  const currency = lang === "fr" ? "DZD" : "د.ج";
+  const ArrowIcon = lang === "fr" ? ArrowRight : ArrowLeft;
 
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
-      {/* Page Header */}
+    <div className="space-y-6 pb-10" dir={t.dir}>
       <div>
-        <h1 className="text-2xl font-black text-slate-900">لوحة التحكم</h1>
-        <p className="text-slate-400 mt-1 text-sm">مرحباً بك في لوحة تحكم Kace Gaming</p>
+        <h1 className="text-2xl font-black text-slate-900">{t.dashboard_title}</h1>
+        <p className="text-slate-400 mt-1 text-sm">{t.dashboard_welcome}</p>
       </div>
 
-      {/* Urgent Alert */}
       {urgentCount > 0 && (
         <button
-          onClick={() => navigate('/orders')}
+          onClick={() => navigate("/orders")}
           className="w-full flex items-center justify-between gap-4 bg-gradient-to-l from-red-500 to-rose-600 text-white rounded-2xl p-4 shadow-lg shadow-red-100 hover:shadow-xl transition-all group"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <div className="text-right">
-              <p className="font-black text-base">
-                {urgentCount} طلب يحتاج انتباهك!
-              </p>
+            <div className={t.dir === "rtl" ? "text-right" : "text-left"}>
+              <p className="font-black text-base">{t.urgent_title(urgentCount)}</p>
               <p className="text-red-100 text-xs mt-0.5">
-                {stats.pendingOrders > 0 && `${stats.pendingOrders} قيد الانتظار`}
-                {stats.pendingOrders > 0 && stats.processingOrders > 0 && ' · '}
-                {stats.processingOrders > 0 && `${stats.processingOrders} قيد التجهيز`}
+                {stats.pendingOrders > 0 && t.pending_sub(stats.pendingOrders)}
+                {stats.pendingOrders > 0 && stats.processingOrders > 0 && " · "}
+                {stats.processingOrders > 0 && t.processing_sub(stats.processingOrders)}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1 text-sm font-bold opacity-80 group-hover:opacity-100">
-            عرض الطلبات
-            <ArrowLeft className="w-4 h-4" />
+            {t.view_orders}
+            <ArrowIcon className="w-4 h-4" />
           </div>
         </button>
       )}
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          label="إجمالي الطلبات"
+          label={t.stat_total_orders}
           value={stats.totalOrders}
           icon={ShoppingCart}
           color="blue"
-          sub={stats.todayOrders > 0 ? `+${stats.todayOrders} اليوم` : undefined}
-          onClick={() => navigate('/orders')}
+          sub={stats.todayOrders > 0 ? t.stat_today(stats.todayOrders) : undefined}
+          onClick={() => navigate("/orders")}
           loading={loading}
         />
         <StatCard
-          label="إجمالي الإيرادات"
-          value={`${stats.totalRevenue.toLocaleString()} د.ج`}
+          label={t.stat_revenue}
+          value={`${stats.totalRevenue.toLocaleString()} ${currency}`}
           icon={DollarSign}
           color="green"
           loading={loading}
         />
         <StatCard
-          label="المنتجات"
+          label={t.stat_products}
           value={stats.totalProducts}
           icon={Package}
           color="purple"
-          sub={stats.lowStockProducts > 0 ? `${stats.lowStockProducts} مخزون منخفض` : undefined}
+          sub={stats.lowStockProducts > 0 ? t.stat_low_stock(stats.lowStockProducts) : undefined}
           subColor={stats.lowStockProducts > 0 ? "text-amber-600" : undefined}
-          onClick={() => navigate('/products')}
+          onClick={() => navigate("/products")}
           loading={loading}
         />
         <StatCard
-          label="الأصناف"
+          label={t.stat_categories}
           value={stats.totalCategories}
           icon={Tags}
           color="orange"
-          onClick={() => navigate('/categories')}
+          onClick={() => navigate("/categories")}
           loading={loading}
         />
       </div>
 
-      {/* Quick Status Overview */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "قيد الانتظار",  count: stats.pendingOrders,    icon: Clock,         color: "bg-amber-50 text-amber-700 border-amber-100", dot: "bg-amber-400" },
-          { label: "قيد التجهيز",   count: stats.processingOrders, icon: Loader2,       color: "bg-blue-50 text-blue-700 border-blue-100",   dot: "bg-blue-400" },
-          { label: "تم التوصيل",    count: 0,                       icon: CheckCircle2,  color: "bg-green-50 text-green-700 border-green-100", dot: "bg-green-400" },
-          { label: "طلبات اليوم",   count: stats.todayOrders,       icon: TrendingUp,    color: "bg-indigo-50 text-indigo-700 border-indigo-100", dot: "bg-indigo-400" },
+          { label: t.status_pending,    count: stats.pendingOrders,    icon: Clock,        color: "bg-amber-50 text-amber-700 border-amber-100",    dot: "bg-amber-400" },
+          { label: t.status_processing, count: stats.processingOrders, icon: Loader2,      color: "bg-blue-50 text-blue-700 border-blue-100",       dot: "bg-blue-400" },
+          { label: t.status_delivered,  count: 0,                       icon: CheckCircle2, color: "bg-green-50 text-green-700 border-green-100",    dot: "bg-green-400" },
+          { label: t.status_today,      count: stats.todayOrders,       icon: TrendingUp,   color: "bg-indigo-50 text-indigo-700 border-indigo-100", dot: "bg-indigo-400" },
         ].map(({ label, count, icon: Icon, color, dot }) => (
           <button
             key={label}
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate("/orders")}
             className={`flex items-center gap-3 rounded-2xl border p-3 transition-all hover:shadow-sm ${color}`}
           >
             <div className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-            <div className="text-right min-w-0">
+            <div className={`${t.dir === "rtl" ? "text-right" : "text-left"} min-w-0`}>
               <p className="text-xs opacity-70 truncate">{label}</p>
-              <p className="text-xl font-black">{loading ? '—' : count}</p>
+              <p className="text-xl font-black">{loading ? "—" : count}</p>
             </div>
           </button>
         ))}
       </div>
 
-      {/* Recent Orders */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-900">آخر الطلبات</h2>
+          <h2 className="text-lg font-bold text-slate-900">{t.recent_orders}</h2>
           <button
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate("/orders")}
             className="text-sm text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
           >
-            عرض الكل
-            <ArrowLeft className="w-3.5 h-3.5" />
+            {t.view_all}
+            <ArrowIcon className="w-3.5 h-3.5" />
           </button>
         </div>
         <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50 overflow-hidden shadow-sm">
@@ -198,7 +197,7 @@ export default function Dashboard() {
           ) : recentOrders.length === 0 ? (
             <div className="p-12 text-center text-slate-400">
               <ShoppingCart className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">لا توجد طلبات حديثة</p>
+              <p className="font-medium">{t.no_recent_orders}</p>
             </div>
           ) : (
             recentOrders.map((order) => {
@@ -206,18 +205,18 @@ export default function Dashboard() {
               return (
                 <div
                   key={order.id as number}
-                  onClick={() => navigate('/orders')}
+                  onClick={() => navigate("/orders")}
                   className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 cursor-pointer transition-colors"
                 >
                   <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm shrink-0">
-                    {String(order.customer_name || "؟").charAt(0)}
+                    {String(order.customer_name || "?").charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-900 text-sm truncate">{order.customer_name}</p>
-                    <p className="text-xs text-slate-400 truncate">{order.wilaya || ''} · #{String(order.id).substring(0, 8)}</p>
+                    <p className="text-xs text-slate-400 truncate">{order.wilaya || ""} · #{String(order.id).substring(0, 8)}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className="font-bold text-sm text-slate-900">{order.total_price} <span className="text-xs font-normal text-slate-400">د.ج</span></span>
+                    <span className="font-bold text-sm text-slate-900">{order.total_price} <span className="text-xs font-normal text-slate-400">{currency}</span></span>
                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
                   </div>
                 </div>
@@ -243,17 +242,17 @@ function StatCard({
   loading?: boolean;
 }) {
   const colors = {
-    blue:   { bg: "bg-blue-600",   shadow: "shadow-blue-100",   ring: "hover:ring-blue-100" },
+    blue:   { bg: "bg-blue-600",    shadow: "shadow-blue-100",    ring: "hover:ring-blue-100" },
     green:  { bg: "bg-emerald-600", shadow: "shadow-emerald-100", ring: "hover:ring-emerald-100" },
-    purple: { bg: "bg-violet-600", shadow: "shadow-violet-100", ring: "hover:ring-violet-100" },
-    orange: { bg: "bg-orange-500", shadow: "shadow-orange-100", ring: "hover:ring-orange-100" },
+    purple: { bg: "bg-violet-600",  shadow: "shadow-violet-100",  ring: "hover:ring-violet-100" },
+    orange: { bg: "bg-orange-500",  shadow: "shadow-orange-100",  ring: "hover:ring-orange-100" },
   };
   const c = colors[color];
 
   return (
     <button
       onClick={onClick}
-      className={`bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 text-right hover:shadow-md ring-2 ring-transparent transition-all ${onClick ? 'cursor-pointer ' + c.ring : 'cursor-default'} w-full`}
+      className={`bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 text-right hover:shadow-md ring-2 ring-transparent transition-all ${onClick ? "cursor-pointer " + c.ring : "cursor-default"} w-full`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className={`p-2.5 rounded-xl ${c.bg} shadow-md ${c.shadow} shrink-0`}>
@@ -266,7 +265,7 @@ function StatCard({
           {loading ? <span className="opacity-20">—</span> : value}
         </p>
         {sub && (
-          <p className={`text-xs font-bold mt-1 ${subColor || 'text-emerald-600'}`}>{sub}</p>
+          <p className={`text-xs font-bold mt-1 ${subColor || "text-emerald-600"}`}>{sub}</p>
         )}
       </div>
     </button>
