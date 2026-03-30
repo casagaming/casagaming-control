@@ -20,6 +20,7 @@ export default function Products() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [variants, setVariants] = useState<any[]>([]);
   const [formData, setFormData] = useState<any>({
     name_ar: "",
@@ -88,7 +89,7 @@ export default function Products() {
       price: product.price as number || 0,
       original_price: product.original_price as number || 0,
       stock: product.stock as number || 0,
-      category_id: product.category_id as string || "",
+      category_id: product.category_id != null ? String(product.category_id) : "",
       is_featured: Boolean(product.is_featured),
       is_new: Boolean(product.is_new),
       is_sale: Boolean(product.is_sale),
@@ -130,6 +131,8 @@ export default function Products() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const slug = `product-${Date.now()}`;
       const imagesStr = JSON.stringify(formData.image_url);
@@ -168,6 +171,8 @@ export default function Products() {
     } catch (error) {
       console.error("Failed to save product", error);
       alert(t.save_failed_product);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -394,7 +399,7 @@ export default function Products() {
                   >
                     <option value="">{t.no_category}</option>
                     {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name_ar}</option>
+                      <option key={cat.id} value={String(cat.id)}>{cat.name_ar}</option>
                     ))}
                   </select>
                 </div>
@@ -502,8 +507,8 @@ export default function Products() {
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors text-sm">
                   {t.cancel}
                 </button>
-                <button type="submit" disabled={isUploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 text-sm">
-                  {editingId ? t.save_changes : t.save_product}
+                <button type="submit" disabled={isUploading || isSubmitting} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 text-sm min-w-[90px]">
+                  {isSubmitting ? (lang === "fr" ? "Enregistrement..." : "جاري الحفظ...") : (editingId ? t.save_changes : t.save_product)}
                 </button>
               </div>
             </form>
@@ -536,7 +541,7 @@ export default function Products() {
                 filteredProducts.map((product) => {
                   let images: string[] = [];
                   try { images = JSON.parse(product.image_url as string || "[]"); } catch (e) {}
-                  const category = categories.find(c => c.id === product.category_id);
+                  const category = categories.find(c => String(c.id) === String(product.category_id));
                   return (
                     <tr key={product.id as number} className="hover:bg-gray-50/50">
                       <td className="px-6 py-4">
@@ -591,7 +596,13 @@ export default function Products() {
             const target = products.find(p => p.id === deleteTargetId);
             if (target) {
               let imgs: string[] = [];
-              try { imgs = JSON.parse(target.images || target.image_url || "[]"); } catch {}
+              const rawImages = target.images || target.image_url || "";
+              try {
+                const parsed = JSON.parse(rawImages);
+                imgs = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+              } catch {
+                if (typeof rawImages === "string" && rawImages.startsWith("http")) imgs = [rawImages];
+              }
               for (const url of imgs) { await deleteCloudinaryImage(url); }
               const variantsRes = await db.execute({ sql: "SELECT image_url FROM product_variants WHERE product_id = ? AND image_url != ''", args: [deleteTargetId] });
               for (const v of variantsRes.rows) { if (v.image_url) await deleteCloudinaryImage(v.image_url as string); }
